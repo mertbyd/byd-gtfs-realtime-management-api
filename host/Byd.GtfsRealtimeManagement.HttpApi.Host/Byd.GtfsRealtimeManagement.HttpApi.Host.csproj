@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Byd.GtfsRealtimeManagement</RootNamespace>
+    <PreserveCompilationReferences>true</PreserveCompilationReferences>
+    <UserSecretsId>Byd.GtfsRealtimeManagement-c2d31439-b723-48e2-b061-5ebd7aeb6010</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.2" />
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <PackageReference Include="Volo.Abp.AspNetCore.Authentication.JwtBearer" Version="10.3.0" />
+    <PackageReference Include="Volo.Abp.Autofac" Version="10.3.0" />
+    <PackageReference Include="Volo.Abp.AspNetCore.Mvc.UI.MultiTenancy" Version="10.3.0" />
+    <PackageReference Include="Volo.Abp.EntityFrameworkCore.PostgreSql" Version="10.3.0" />
+    <PackageReference Include="Volo.Abp.AspNetCore.Serilog" Version="10.3.0" />
+    <PackageReference Include="Volo.Abp.Swashbuckle" Version="10.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Byd.GtfsRealtimeManagement.HttpApi\Byd.GtfsRealtimeManagement.HttpApi.csproj" />
+    <ProjectReference Include="..\..\src\Byd.GtfsRealtimeManagement.Application\Byd.GtfsRealtimeManagement.Application.csproj" />
+    <ProjectReference Include="..\..\src\Byd.GtfsRealtimeManagement.EntityFrameworkCore\Byd.GtfsRealtimeManagement.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\Byd.GtfsRealtimeManagement.Host.Shared\Byd.GtfsRealtimeManagement.Host.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Logs\**" />
+    <Content Remove="Logs\**" />
+    <EmbeddedResource Remove="Logs\**" />
+    <None Remove="Logs\**" />
+  </ItemGroup>
+
+</Project>

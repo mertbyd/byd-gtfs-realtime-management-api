@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/bin\\*
+**/obj\\*
+**/Logs/
+**/logs/
+.idea/
+.vs/
+**/appsettings.Development.json
+**/appsettings.Local.json
+*.user
+TestResults/
+.codex/local/

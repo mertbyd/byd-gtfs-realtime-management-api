@@ -1,0 +1,63 @@
+{
+  "folders": {
+    "items": {
+      "src": {},
+      "test": {},
+      "host": {}
+    }
+  },
+  "packages": {
+    "Byd.GtfsRealtimeManagement.Domain.Shared": {
+      "path": "src/Byd.GtfsRealtimeManagement.Domain.Shared/Byd.GtfsRealtimeManagement.Domain.Shared.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.Domain": {
+      "path": "src/Byd.GtfsRealtimeManagement.Domain/Byd.GtfsRealtimeManagement.Domain.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.Application.Contracts": {
+      "path": "src/Byd.GtfsRealtimeManagement.Application.Contracts/Byd.GtfsRealtimeManagement.Application.Contracts.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.Application": {
+      "path": "src/Byd.GtfsRealtimeManagement.Application/Byd.GtfsRealtimeManagement.Application.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.EntityFrameworkCore": {
+      "path": "src/Byd.GtfsRealtimeManagement.EntityFrameworkCore/Byd.GtfsRealtimeManagement.EntityFrameworkCore.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.HttpApi": {
+      "path": "src/Byd.GtfsRealtimeManagement.HttpApi/Byd.GtfsRealtimeManagement.HttpApi.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.HttpApi.Client": {
+      "path": "src/Byd.GtfsRealtimeManagement.HttpApi.Client/Byd.GtfsRealtimeManagement.HttpApi.Client.abppkg",
+      "folder": "src"
+    },
+    "Byd.GtfsRealtimeManagement.TestBase": {
+      "path": "test/Byd.GtfsRealtimeManagement.TestBase/Byd.GtfsRealtimeManagement.TestBase.abppkg",
+      "folder": "test"
+    },
+    "Byd.GtfsRealtimeManagement.EntityFrameworkCore.Tests": {
+      "path": "test/Byd.GtfsRealtimeManagement.EntityFrameworkCore.Tests/Byd.GtfsRealtimeManagement.EntityFrameworkCore.Tests.abppkg",
+      "folder": "test"
+    },
+    "Byd.GtfsRealtimeManagement.Domain.Tests": {
+      "path": "test/Byd.GtfsRealtimeManagement.Domain.Tests/Byd.GtfsRealtimeManagement.Domain.Tests.abppkg",
+      "folder": "test"
+    },
+    "Byd.GtfsRealtimeManagement.Application.Tests": {
+      "path": "test/Byd.GtfsRealtimeManagement.Application.Tests/Byd.GtfsRealtimeManagement.Application.Tests.abppkg",
+      "folder": "test"
+    },
+    "Byd.GtfsRealtimeManagement.HttpApi.Host": {
+      "path": "host/Byd.GtfsRealtimeManagement.HttpApi.Host/Byd.GtfsRealtimeManagement.HttpApi.Host.abppkg",
+      "folder": "host"
+    },
+    "Byd.GtfsRealtimeManagement.Host.Shared": {
+      "path": "host/Byd.GtfsRealtimeManagement.Host.Shared/Byd.GtfsRealtimeManagement.Host.Shared.abppkg",
+      "folder": "host"
+    }
+  }
+}
