@@ -4,11 +4,14 @@ using Volo.Abp.Localization;
 
 namespace Byd.GtfsRealtimeManagement.Permissions;
 
-public class GtfsRealtimeManagementPermissionDefinitionProvider : PermissionDefinitionProvider
+public partial class GtfsRealtimeManagementPermissionDefinitionProvider : PermissionDefinitionProvider
 {
     public override void Define(IPermissionDefinitionContext context)
     {
-        // var myGroup = context.AddGroup(GtfsRealtimeManagementPermissions.GroupName, L("Permission:GtfsRealtimeManagement"));
+        var group = context.AddGroup(
+            GtfsRealtimeManagementPermissions.GroupName,
+            L(GtfsRealtimeManagementLocalizationKeys.Permissions.Group));
+        AddLookupPermissions(group);
     }
 
     private static LocalizableString L(string name)

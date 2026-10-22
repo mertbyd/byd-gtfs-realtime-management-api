@@ -2,5 +2,6 @@ namespace Byd.GtfsRealtimeManagement;
 
 public static class GtfsRealtimeManagementErrorCodes
 {
-    //Add your business exception error codes here...
+    public const string RootNamespace = "GtfsRealtimeManagement";
+    public const string LookupGroup = RootNamespace + ":01";
 }

@@ -5,6 +5,9 @@ namespace Byd.GtfsRealtimeManagement;
 
 public abstract class GtfsRealtimeManagementAppService : ApplicationService
 {
+    protected T LazyGetRequiredService<T>() where T : notnull =>
+        LazyServiceProvider.LazyGetRequiredService<T>();
+
     protected GtfsRealtimeManagementAppService()
     {
         LocalizationResource = typeof(GtfsRealtimeManagementResource);

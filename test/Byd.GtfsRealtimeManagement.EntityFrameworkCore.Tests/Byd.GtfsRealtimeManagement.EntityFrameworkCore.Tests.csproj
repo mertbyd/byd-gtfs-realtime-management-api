@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="10.0.2" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
     <ProjectReference Include="..\..\src\Byd.GtfsRealtimeManagement.EntityFrameworkCore\Byd.GtfsRealtimeManagement.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\Byd.GtfsRealtimeManagement.HttpApi\Byd.GtfsRealtimeManagement.HttpApi.csproj" />
     <ProjectReference Include="..\Byd.GtfsRealtimeManagement.Application.Tests\Byd.GtfsRealtimeManagement.Application.Tests.csproj" />
     <PackageReference Include="Volo.Abp.EntityFrameworkCore.Sqlite" Version="10.3.0" />
 

@@ -2,6 +2,15 @@
   "culture": "en",
   "texts": {
     "MyAccount":  "My account",
-    "SamplePageMessage": "A sample page for the GtfsRealtimeManagement module"
+    "SamplePageMessage": "A sample page for the GtfsRealtimeManagement module",
+    "Permission:GtfsRealtimeManagement": "GTFS realtime management",
+    "Permission:Lookups": "Realtime lookups",
+    "Permission:Lookups.View": "View realtime lookups",
+    "Permission:Lookups.Manage": "Manage realtime lookups",
+    "GtfsRealtimeManagement:010001": "Lookup name is required.",
+    "GtfsRealtimeManagement:010002": "Lookup code must be zero or greater.",
+    "GtfsRealtimeManagement:010003": "Lookup code already exists.",
+    "ActivityLogs:LookupUpdated": "Realtime lookup updated.",
+    "ActivityLogs:LookupDeleted": "Realtime lookup deleted."
   }
 }

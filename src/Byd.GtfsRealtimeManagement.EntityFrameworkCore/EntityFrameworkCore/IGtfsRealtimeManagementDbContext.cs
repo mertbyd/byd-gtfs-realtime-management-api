@@ -1,4 +1,6 @@
-﻿using Volo.Abp.Data;
+using Microsoft.EntityFrameworkCore;
+using Byd.GtfsRealtimeManagement.Entities.Lookups;
+using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore;
 
 namespace Byd.GtfsRealtimeManagement.EntityFrameworkCore;
@@ -6,7 +8,8 @@ namespace Byd.GtfsRealtimeManagement.EntityFrameworkCore;
 [ConnectionStringName(GtfsRealtimeManagementDbProperties.ConnectionStringName)]
 public interface IGtfsRealtimeManagementDbContext : IEfCoreDbContext
 {
-    /* Add DbSet for each Aggregate Root here. Example:
-     * DbSet<Question> Questions { get; }
-     */
+    DbSet<TripScheduleRelationship> TripScheduleRelationships { get; }
+    DbSet<StopScheduleRelationship> StopScheduleRelationships { get; }
+    DbSet<VehicleStopStatus> VehicleStopStatuses { get; }
+    DbSet<ViolationType> ViolationTypes { get; }
 }
