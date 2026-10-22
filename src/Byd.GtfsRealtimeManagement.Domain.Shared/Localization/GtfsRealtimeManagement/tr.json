@@ -2,6 +2,15 @@
   "culture": "tr",
   "texts": {
     "MyAccount":  "Hesabım",
-    "SamplePageMessage": "GtfsRealtimeManagement modulünden örnek bir sayfa"
+    "SamplePageMessage": "GtfsRealtimeManagement modulünden örnek bir sayfa",
+    "Permission:GtfsRealtimeManagement": "GTFS gerçek zamanlı yönetimi",
+    "Permission:Lookups": "Gerçek zamanlı listeler",
+    "Permission:Lookups.View": "Gerçek zamanlı listeleri görüntüle",
+    "Permission:Lookups.Manage": "Gerçek zamanlı listeleri yönet",
+    "GtfsRealtimeManagement:010001": "Lookup adı zorunludur.",
+    "GtfsRealtimeManagement:010002": "Lookup kodu sıfır veya daha büyük olmalıdır.",
+    "GtfsRealtimeManagement:010003": "Lookup kodu zaten kayıtlı.",
+    "ActivityLogs:LookupUpdated": "Gerçek zamanlı lookup kaydı güncellendi.",
+    "ActivityLogs:LookupDeleted": "Gerçek zamanlı lookup kaydı silindi."
   }
 }
