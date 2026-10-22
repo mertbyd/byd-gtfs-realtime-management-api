@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Byd.GtfsRealtimeManagement.Entities.Lookups;
+using Byd.GtfsRealtimeManagement.Entities.RealtimeSources;
 using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore;
 
@@ -12,4 +13,5 @@ public interface IGtfsRealtimeManagementDbContext : IEfCoreDbContext
     DbSet<StopScheduleRelationship> StopScheduleRelationships { get; }
     DbSet<VehicleStopStatus> VehicleStopStatuses { get; }
     DbSet<ViolationType> ViolationTypes { get; }
+    DbSet<RealtimeSource> RealtimeSources { get; }
 }

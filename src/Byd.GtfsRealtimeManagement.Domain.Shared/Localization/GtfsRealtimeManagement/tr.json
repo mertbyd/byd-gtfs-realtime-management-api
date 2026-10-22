@@ -7,10 +7,19 @@
     "Permission:Lookups": "Gerçek zamanlı listeler",
     "Permission:Lookups.View": "Gerçek zamanlı listeleri görüntüle",
     "Permission:Lookups.Manage": "Gerçek zamanlı listeleri yönet",
+    "Permission:RealtimeSources": "Gerçek zamanlı kaynaklar",
+    "Permission:RealtimeSources.View": "Gerçek zamanlı kaynakları görüntüle",
+    "Permission:RealtimeSources.Manage": "Gerçek zamanlı kaynakları yönet",
     "GtfsRealtimeManagement:010001": "Lookup adı zorunludur.",
     "GtfsRealtimeManagement:010002": "Lookup kodu sıfır veya daha büyük olmalıdır.",
     "GtfsRealtimeManagement:010003": "Lookup kodu zaten kayıtlı.",
+    "GtfsRealtimeManagement:020001": "Tenant ve organizasyon zorunludur.",
+    "GtfsRealtimeManagement:020002": "Kaynak adı zorunludur.",
+    "GtfsRealtimeManagement:020003": "En az bir gerçek zamanlı akış adresi zorunludur.",
+    "GtfsRealtimeManagement:020004": "Akış adresi mutlak HTTP veya HTTPS adresi olmalıdır.",
     "ActivityLogs:LookupUpdated": "Gerçek zamanlı lookup kaydı güncellendi.",
-    "ActivityLogs:LookupDeleted": "Gerçek zamanlı lookup kaydı silindi."
+    "ActivityLogs:LookupDeleted": "Gerçek zamanlı lookup kaydı silindi.",
+    "ActivityLogs:RealtimeSourceUpdated": "Gerçek zamanlı kaynak güncellendi.",
+    "ActivityLogs:RealtimeSourceDeleted": "Gerçek zamanlı kaynak silindi."
   }
 }

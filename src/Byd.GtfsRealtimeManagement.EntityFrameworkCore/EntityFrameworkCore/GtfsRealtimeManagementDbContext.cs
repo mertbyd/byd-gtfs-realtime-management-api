@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Byd.CoreExtensions.EntityFrameworkCore;
 using Byd.CoreExtensions.Extensions;
 using Byd.GtfsRealtimeManagement.Entities.Lookups;
+using Byd.GtfsRealtimeManagement.Entities.RealtimeSources;
 using Volo.Abp.Data;
 
 namespace Byd.GtfsRealtimeManagement.EntityFrameworkCore;
@@ -13,6 +14,7 @@ public class GtfsRealtimeManagementDbContext : BydDbContext<GtfsRealtimeManageme
     public DbSet<StopScheduleRelationship> StopScheduleRelationships { get; set; } = default!;
     public DbSet<VehicleStopStatus> VehicleStopStatuses { get; set; } = default!;
     public DbSet<ViolationType> ViolationTypes { get; set; } = default!;
+    public DbSet<RealtimeSource> RealtimeSources { get; set; } = default!;
 
     public GtfsRealtimeManagementDbContext(DbContextOptions<GtfsRealtimeManagementDbContext> options)
         : base(options)

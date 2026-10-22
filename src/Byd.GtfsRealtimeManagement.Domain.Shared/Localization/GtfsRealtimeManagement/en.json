@@ -7,10 +7,19 @@
     "Permission:Lookups": "Realtime lookups",
     "Permission:Lookups.View": "View realtime lookups",
     "Permission:Lookups.Manage": "Manage realtime lookups",
+    "Permission:RealtimeSources": "Realtime sources",
+    "Permission:RealtimeSources.View": "View realtime sources",
+    "Permission:RealtimeSources.Manage": "Manage realtime sources",
     "GtfsRealtimeManagement:010001": "Lookup name is required.",
     "GtfsRealtimeManagement:010002": "Lookup code must be zero or greater.",
     "GtfsRealtimeManagement:010003": "Lookup code already exists.",
+    "GtfsRealtimeManagement:020001": "Tenant and organization are required.",
+    "GtfsRealtimeManagement:020002": "Source name is required.",
+    "GtfsRealtimeManagement:020003": "At least one realtime feed URL is required.",
+    "GtfsRealtimeManagement:020004": "Realtime feed URL must be an absolute HTTP or HTTPS URL.",
     "ActivityLogs:LookupUpdated": "Realtime lookup updated.",
-    "ActivityLogs:LookupDeleted": "Realtime lookup deleted."
+    "ActivityLogs:LookupDeleted": "Realtime lookup deleted.",
+    "ActivityLogs:RealtimeSourceUpdated": "Realtime source updated.",
+    "ActivityLogs:RealtimeSourceDeleted": "Realtime source deleted."
   }
 }
