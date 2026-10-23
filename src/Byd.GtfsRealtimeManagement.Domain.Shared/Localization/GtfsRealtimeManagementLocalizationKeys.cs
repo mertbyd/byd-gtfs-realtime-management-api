@@ -13,6 +13,9 @@ public static class GtfsRealtimeManagementLocalizationKeys
         public const string RealtimeSources = "Permission:RealtimeSources";
         public const string RealtimeSourcesView = "Permission:RealtimeSources.View";
         public const string RealtimeSourcesManage = "Permission:RealtimeSources.Manage";
+        public const string RealtimeStopTimes = "Permission:RealtimeStopTimes";
+        public const string RealtimeStopTimesView = "Permission:RealtimeStopTimes.View";
+        public const string RealtimeStopTimesManage = "Permission:RealtimeStopTimes.Manage";
     }
 
     public static class ActivityLogs
@@ -22,5 +25,7 @@ public static class GtfsRealtimeManagementLocalizationKeys
         public const string RealtimeSourceUpdated = "ActivityLogs:RealtimeSourceUpdated";
         public const string RealtimeSourceActivated = "ActivityLogs:RealtimeSourceActivated";
         public const string RealtimeSourceDeleted = "ActivityLogs:RealtimeSourceDeleted";
+        public const string RealtimeStopTimeUpdated = "ActivityLogs:RealtimeStopTimeUpdated";
+        public const string RealtimeStopTimeDeleted = "ActivityLogs:RealtimeStopTimeDeleted";
     }
 }

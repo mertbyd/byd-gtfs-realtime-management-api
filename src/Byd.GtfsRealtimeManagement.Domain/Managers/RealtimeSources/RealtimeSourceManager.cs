@@ -71,6 +71,7 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
         RealtimeSource entity, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        using var inactiveIncluded = DataFilter.Disable<ActiveRealtimeSourceFilter>();
         if (await Repository.IsDataUsedAsync(entity, ignoredEntityTypes: null, cancellationToken))
             throw new BusinessException(GeneralExceptionCodes.RelationalDataDelete);
     }

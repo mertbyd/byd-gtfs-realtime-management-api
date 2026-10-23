@@ -10,6 +10,9 @@
     "Permission:RealtimeSources": "Realtime sources",
     "Permission:RealtimeSources.View": "View realtime sources",
     "Permission:RealtimeSources.Manage": "Manage realtime sources",
+    "Permission:RealtimeStopTimes": "Realtime stop times",
+    "Permission:RealtimeStopTimes.View": "View realtime stop times",
+    "Permission:RealtimeStopTimes.Manage": "Manage realtime stop times",
     "GtfsRealtimeManagement:010001": "Lookup name is required.",
     "GtfsRealtimeManagement:010002": "Lookup code must be zero or greater.",
     "GtfsRealtimeManagement:010003": "Lookup code already exists.",
@@ -21,10 +24,19 @@
     "GtfsRealtimeManagement:020006": "An active realtime source is required for this organization.",
     "GtfsRealtimeManagement:030001": "Realtime feed response could not be decoded as GTFS-RT protobuf.",
     "GtfsRealtimeManagement:030002": "Realtime feed version or incrementality is not supported.",
+    "GtfsRealtimeManagement:040001": "A static GTFS feed is required.",
+    "GtfsRealtimeManagement:040002": "A valid relationship lookup is required.",
+    "GtfsRealtimeManagement:040003": "Service date is required.",
+    "GtfsRealtimeManagement:040004": "GTFS trip, route and stop identifiers are required.",
+    "GtfsRealtimeManagement:040005": "Stop sequence cannot be negative.",
+    "GtfsRealtimeManagement:040006": "Coordinates are outside WGS-84 bounds.",
+    "GtfsRealtimeManagement:040007": "Start time must use GTFS HH:MM:SS format.",
     "ActivityLogs:LookupUpdated": "Realtime lookup updated.",
     "ActivityLogs:LookupDeleted": "Realtime lookup deleted.",
     "ActivityLogs:RealtimeSourceUpdated": "Realtime source updated.",
     "ActivityLogs:RealtimeSourceActivated": "Realtime source activated.",
-    "ActivityLogs:RealtimeSourceDeleted": "Realtime source deleted."
+    "ActivityLogs:RealtimeSourceDeleted": "Realtime source deleted.",
+    "ActivityLogs:RealtimeStopTimeUpdated": "Realtime stop time updated.",
+    "ActivityLogs:RealtimeStopTimeDeleted": "Realtime stop time deleted."
   }
 }
