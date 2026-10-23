@@ -27,7 +27,7 @@ public class RealtimeSource : AuditedAggregateRoot<Guid>, IMultiTenant, IMultiOr
     // ServiceAlerts akisi adresi.
     public string? ServiceAlertsUrl { get; internal set; }
 
-    // Kaynagin cekim icin acik olup olmadigi; CRUD okumalarini filtrelemez.
+    // Organizasyonun yayinlanan aktif kaynagi olup olmadigi.
     public bool IsActive { get; internal set; }
 
     // EF materialization icin bos kabuk kurar.

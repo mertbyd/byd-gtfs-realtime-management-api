@@ -31,25 +31,33 @@ public class RealtimeSourceCrudTests : GtfsRealtimeManagementEntityFrameworkCore
         using var organization = CurrentOrganization.Change(OrganizationId);
         var created = await WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("Vilnius")));
         Assert.NotEqual(Guid.Empty, created.Id);
+        Assert.False(created.IsActive);
         Assert.Equal("https://example.org/vehicles.pb", created.VehiclePositionsUrl);
-        Assert.Equal(created.Name, (await WithUnitOfWorkAsync(() => SourceService.GetAsync(created.Id))).Name);
+        Assert.Equal(created.Name, (await WithUnitOfWorkAsync(() =>
+            SourceService.GetIncludingInactiveAsync(created.Id))).Name);
+        await Assert.ThrowsAsync<BusinessException>(() =>
+            WithUnitOfWorkAsync(() => SourceService.GetAsync(created.Id)));
 
         var duplicate = await Assert.ThrowsAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("Vilnius"))));
         Assert.Equal(GeneralExceptionCodes.AlreadyExists, duplicate.Code);
 
+        var activated = await WithUnitOfWorkAsync(() => SourceService.ActivateAsync(created.Id));
+        Assert.True(activated.IsActive);
+        Assert.Equal(created.Name, (await WithUnitOfWorkAsync(() => SourceService.GetAsync(created.Id))).Name);
+
         var updated = await WithUnitOfWorkAsync(() => SourceService.UpdateAsync(created.Id,
             new UpdateRealtimeSourceDto
             {
-                Name = "Vilnius Updated", TripUpdatesUrl = "https://example.org/trips.pb", IsActive = false
+                Name = "Vilnius Updated", TripUpdatesUrl = "https://example.org/trips.pb"
             }));
-        Assert.False(updated.IsActive);
+        Assert.True(updated.IsActive);
         Assert.Null(updated.VehiclePositionsUrl);
         Assert.Equal("https://example.org/trips.pb", updated.TripUpdatesUrl);
         var page = await WithUnitOfWorkAsync(() =>
             SourceService.GetFilteredListAsync(new DataTableListInput<RealtimeSourceFilter>()));
         Assert.Equal(1, page.TotalCount);
-        Assert.False(page.Items[0].IsActive);
+        Assert.True(page.Items[0].IsActive);
         var filtered = await WithUnitOfWorkAsync(() => SourceService.GetFilteredListAsync(
             new DataTableListInput<RealtimeSourceFilter>
             {
@@ -66,6 +74,27 @@ public class RealtimeSourceCrudTests : GtfsRealtimeManagementEntityFrameworkCore
         await WithUnitOfWorkAsync(() => SourceService.DeleteAsync(created.Id));
         await Assert.ThrowsAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => SourceService.GetAsync(created.Id)));
+    }
+
+    [Fact]
+    public async Task ActivatingSecondSource_HidesPreviousSourceButKeepsItManageable()
+    {
+        using var tenant = CurrentTenant.Change(TenantId);
+        using var organization = CurrentOrganization.Change(OrganizationId);
+        var first = await WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("First")));
+        var second = await WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("Second")));
+
+        await WithUnitOfWorkAsync(() => SourceService.ActivateAsync(first.Id));
+        await WithUnitOfWorkAsync(() => SourceService.ActivateAsync(second.Id));
+
+        Assert.True((await WithUnitOfWorkAsync(() => SourceService.GetAsync(second.Id))).IsActive);
+        await Assert.ThrowsAsync<BusinessException>(() =>
+            WithUnitOfWorkAsync(() => SourceService.GetAsync(first.Id)));
+        Assert.False((await WithUnitOfWorkAsync(() =>
+            SourceService.GetIncludingInactiveAsync(first.Id))).IsActive);
+        var history = await WithUnitOfWorkAsync(() =>
+            SourceService.GetFilteredListAsync(new DataTableListInput<RealtimeSourceFilter>()));
+        Assert.Equal(2, history.TotalCount);
     }
 
     [Fact]
@@ -89,7 +118,7 @@ public class RealtimeSourceCrudTests : GtfsRealtimeManagementEntityFrameworkCore
                 SourceService.GetFilteredListAsync(new DataTableListInput<RealtimeSourceFilter>()));
             Assert.Equal(1, page.TotalCount);
             await Assert.ThrowsAsync<BusinessException>(() =>
-                WithUnitOfWorkAsync(() => SourceService.GetAsync(firstId)));
+                WithUnitOfWorkAsync(() => SourceService.GetIncludingInactiveAsync(firstId)));
             await Assert.ThrowsAsync<BusinessException>(() =>
                 WithUnitOfWorkAsync(() => SourceService.DeleteAsync(firstId)));
         }
@@ -114,7 +143,6 @@ public class RealtimeSourceCrudTests : GtfsRealtimeManagementEntityFrameworkCore
     private static CreateRealtimeSourceDto NewSource(string name) => new()
     {
         Name = name,
-        VehiclePositionsUrl = "https://example.org/vehicles.pb",
-        IsActive = true
+        VehiclePositionsUrl = "https://example.org/vehicles.pb"
     };
 }

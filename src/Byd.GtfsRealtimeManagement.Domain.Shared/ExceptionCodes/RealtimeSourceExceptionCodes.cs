@@ -8,4 +8,6 @@ public static class RealtimeSourceExceptionCodes
     public const string NameRequired = GtfsRealtimeManagementErrorCodes.RealtimeSourceGroup + "0002";
     public const string UrlRequired = GtfsRealtimeManagementErrorCodes.RealtimeSourceGroup + "0003";
     public const string UrlInvalid = GtfsRealtimeManagementErrorCodes.RealtimeSourceGroup + "0004";
+    public const string FeedUrlNotConfigured = GtfsRealtimeManagementErrorCodes.RealtimeSourceGroup + "0005";
+    public const string ActiveSourceRequired = GtfsRealtimeManagementErrorCodes.RealtimeSourceGroup + "0006";
 }

@@ -9,5 +9,4 @@ public abstract class RealtimeSourceInputDto
     public string? VehiclePositionsUrl { get; set; }
     public string? TripUpdatesUrl { get; set; }
     public string? ServiceAlertsUrl { get; set; }
-    public bool IsActive { get; set; }
 }

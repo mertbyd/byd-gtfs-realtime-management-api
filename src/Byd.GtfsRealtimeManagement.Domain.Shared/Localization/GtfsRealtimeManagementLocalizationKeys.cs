@@ -20,6 +20,7 @@ public static class GtfsRealtimeManagementLocalizationKeys
         public const string LookupUpdated = "ActivityLogs:LookupUpdated";
         public const string LookupDeleted = "ActivityLogs:LookupDeleted";
         public const string RealtimeSourceUpdated = "ActivityLogs:RealtimeSourceUpdated";
+        public const string RealtimeSourceActivated = "ActivityLogs:RealtimeSourceActivated";
         public const string RealtimeSourceDeleted = "ActivityLogs:RealtimeSourceDeleted";
     }
 }
