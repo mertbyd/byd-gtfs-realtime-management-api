@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Byd.CoreExtensions.ExceptionCodes;
 using Byd.CoreExtensions.Managers;
+using Byd.CoreExtensions.Querying;
 using Byd.GtfsRealtimeManagement.Entities.Lookups;
 using Byd.GtfsRealtimeManagement.Entities.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Interfaces;
@@ -57,13 +58,30 @@ public class RealtimeStopTimeManager(
             ?? throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
     }
 
-    // Pasif kaynak gecmisini de tenant ve organizasyon kapsaminda okur.
-    public virtual async Task<RealtimeStopTime> EnsureExistsIncludingInactiveInScopeAsync(
-        Guid id, CancellationToken cancellationToken = default)
+    // Belirli kaynagin pasif ya da gecmis satirini getirir; kaynak istegin kapsaminda olmali.
+    public virtual async Task<RealtimeStopTime> EnsureExistsForSourceAsync(
+        Guid realtimeSourceId, Guid id, CancellationToken cancellationToken = default)
     {
         using var inactiveIncluded = DataFilter.Disable<ActiveRealtimeSourceFilter>();
-        return await repository.FindWithLookupsAsync(id, cancellationToken)
-            ?? throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
+        await sourceManager.EnsureExistsInScopeAsync(realtimeSourceId, cancellationToken);
+        var entity = await repository.FindWithLookupsAsync(id, cancellationToken);
+        return entity is not null && entity.RealtimeSourceId == realtimeSourceId
+            ? entity
+            : throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
+    }
+
+    // Liste filtresindeki kaynak alanini, istegin kapsaminda dogrulanan kaynaga kilitler.
+    public virtual async Task ScopeFilterAsync(
+        IRealtimeSourceFilter filter, Guid realtimeSourceId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        using var inactiveIncluded = DataFilter.Disable<ActiveRealtimeSourceFilter>();
+        await sourceManager.EnsureExistsInScopeAsync(realtimeSourceId, cancellationToken);
+        filter.RealtimeSourceId = new DataTableFilterItem
+        {
+            Operator = DataTableFilterOperator.Equal,
+            Value = realtimeSourceId.ToString()
+        };
     }
 
     // Girdi alanlarini uygular ve sefer ornegi/durak sirasini tekillestirir.

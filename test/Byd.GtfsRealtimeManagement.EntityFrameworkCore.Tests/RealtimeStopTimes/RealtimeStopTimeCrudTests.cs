@@ -73,45 +73,50 @@ public class RealtimeStopTimeCrudTests : GtfsRealtimeManagementEntityFrameworkCo
     }
 
     [Fact]
-    public async Task SourceSwitch_HidesOldRows_WhileHistoryRetainsScope()
+    public async Task SourceSwitch_HidesOldRows_WhileSourceHistoryRetainsScope()
     {
         await SeedRelationshipsAsync();
         using var tenant = CurrentTenant.Change(TenantId);
+        Guid oldSourceId;
         Guid oldStopId;
         using (CurrentOrganization.Change(OrganizationId))
         {
-            var oldSource = await CreateActiveSourceAsync("First");
+            oldSourceId = (await CreateActiveSourceAsync("First")).Id;
             oldStopId = (await WithUnitOfWorkAsync(() => StopTimes.CreateAsync(NewStopTime()))).Id;
-            await CreateActiveSourceAsync("Second");
+            var newSourceId = (await CreateActiveSourceAsync("Second")).Id;
 
             Assert.Equal(0, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListAsync(
                 new DataTableListInput<RealtimeStopTimeFilter>()))).TotalCount);
-            Assert.Equal(1, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListIncludingInactiveAsync(
+            Assert.Equal(1, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListForSourceAsync(oldSourceId,
+                new DataTableListInput<RealtimeStopTimeFilter>()))).TotalCount);
+            Assert.Equal(0, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListForSourceAsync(newSourceId,
                 new DataTableListInput<RealtimeStopTimeFilter>()))).TotalCount);
             await Assert.ThrowsAsync<BusinessException>(() =>
                 WithUnitOfWorkAsync(() => StopTimes.GetAsync(oldStopId)));
             Assert.Equal("First", (await WithUnitOfWorkAsync(() =>
-                StopTimes.GetIncludingInactiveAsync(oldStopId))).RealtimeSourceName);
+                StopTimes.GetForSourceAsync(oldSourceId, oldStopId))).RealtimeSourceName);
+            await Assert.ThrowsAsync<BusinessException>(() =>
+                WithUnitOfWorkAsync(() => StopTimes.GetForSourceAsync(newSourceId, oldStopId)));
             var deleteError = await Assert.ThrowsAsync<BusinessException>(() =>
-                WithUnitOfWorkAsync(() => Sources.DeleteAsync(oldSource.Id)));
+                WithUnitOfWorkAsync(() => Sources.DeleteAsync(oldSourceId)));
             Assert.Equal(GeneralExceptionCodes.RelationalDataDelete, deleteError.Code);
         }
 
         using (CurrentOrganization.Change(OtherOrganizationId))
         {
-            Assert.Equal(0, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListIncludingInactiveAsync(
-                new DataTableListInput<RealtimeStopTimeFilter>()))).TotalCount);
+            await Assert.ThrowsAsync<BusinessException>(() => WithUnitOfWorkAsync(() =>
+                StopTimes.GetFilteredListForSourceAsync(oldSourceId, new DataTableListInput<RealtimeStopTimeFilter>())));
             await Assert.ThrowsAsync<BusinessException>(() =>
-                WithUnitOfWorkAsync(() => StopTimes.GetIncludingInactiveAsync(oldStopId)));
+                WithUnitOfWorkAsync(() => StopTimes.GetForSourceAsync(oldSourceId, oldStopId)));
         }
 
         using (CurrentTenant.Change(Guid.NewGuid()))
         using (CurrentOrganization.Change(OrganizationId))
         {
-            Assert.Equal(0, (await WithUnitOfWorkAsync(() => StopTimes.GetFilteredListIncludingInactiveAsync(
-                new DataTableListInput<RealtimeStopTimeFilter>()))).TotalCount);
+            await Assert.ThrowsAsync<BusinessException>(() => WithUnitOfWorkAsync(() =>
+                StopTimes.GetFilteredListForSourceAsync(oldSourceId, new DataTableListInput<RealtimeStopTimeFilter>())));
             await Assert.ThrowsAsync<BusinessException>(() =>
-                WithUnitOfWorkAsync(() => StopTimes.GetIncludingInactiveAsync(oldStopId)));
+                WithUnitOfWorkAsync(() => StopTimes.GetForSourceAsync(oldSourceId, oldStopId)));
         }
     }
 

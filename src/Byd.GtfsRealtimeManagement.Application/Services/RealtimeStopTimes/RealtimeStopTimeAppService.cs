@@ -38,10 +38,10 @@ public class RealtimeStopTimeAppService : GtfsRealtimeManagementAppService, IRea
     public virtual async Task<RealtimeStopTimeDto> GetAsync(Guid id, CancellationToken cancellationToken = default)
         => Mapper.Map(await Manager.EnsureExistsInScopeAsync(id, cancellationToken));
 
-    // Pasif kaynak gecmisindeki satiri da kapsam icinde getirir.
-    public virtual async Task<RealtimeStopTimeDto> GetIncludingInactiveAsync(
-        Guid id, CancellationToken cancellationToken = default)
-        => Mapper.Map(await Manager.EnsureExistsIncludingInactiveInScopeAsync(id, cancellationToken));
+    // Belirli kaynagin pasif ya da gecmis satirini kapsam icinde getirir.
+    public virtual async Task<RealtimeStopTimeDto> GetForSourceAsync(
+        Guid realtimeSourceId, Guid id, CancellationToken cancellationToken = default)
+        => Mapper.Map(await Manager.EnsureExistsForSourceAsync(realtimeSourceId, id, cancellationToken));
 
     // Aktif kaynak satirlarinin filtreli sayfasini getirir.
     public virtual async Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListAsync(
@@ -53,11 +53,13 @@ public class RealtimeStopTimeAppService : GtfsRealtimeManagementAppService, IRea
         return new PagedResultDto<RealtimeStopTimeDto>(totalCount, entities.Select(Mapper.Map).ToList());
     }
 
-    // Pasif kaynak gecmisini dahil ederek filtreli sayfa getirir.
-    public virtual async Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListIncludingInactiveAsync(
-        DataTableListInput<RealtimeStopTimeFilter> input, CancellationToken cancellationToken = default)
+    // Belirli kaynagin satirlarini, istemci filtresi ne olursa olsun o kaynaga kilitleyerek sayfalar.
+    public virtual async Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListForSourceAsync(
+        Guid realtimeSourceId, DataTableListInput<RealtimeStopTimeFilter> input,
+        CancellationToken cancellationToken = default)
     {
         using var inactiveIncluded = ActiveFilter.Disable<ActiveRealtimeSourceFilter>();
+        await Manager.ScopeFilterAsync(input.Filters ??= new RealtimeStopTimeFilter(), realtimeSourceId, cancellationToken);
         return await GetFilteredListAsync(input, cancellationToken);
     }
 
