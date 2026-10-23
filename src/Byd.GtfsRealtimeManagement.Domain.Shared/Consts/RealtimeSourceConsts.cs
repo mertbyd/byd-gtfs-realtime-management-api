@@ -6,4 +6,5 @@ public static class RealtimeSourceConsts
 {
     public const string TableName = "RealtimeSources";
     public const string NameIndex = "IX_RealtimeSources_Scope_Name";
+    public const string ActiveOrganizationIndex = "IX_RealtimeSources_Active_Organization";
 }

@@ -17,9 +17,14 @@
     "GtfsRealtimeManagement:020002": "Kaynak adı zorunludur.",
     "GtfsRealtimeManagement:020003": "En az bir gerçek zamanlı akış adresi zorunludur.",
     "GtfsRealtimeManagement:020004": "Akış adresi mutlak HTTP veya HTTPS adresi olmalıdır.",
+    "GtfsRealtimeManagement:020005": "Kaynakta bu akışın adresi tanımlı değil.",
+    "GtfsRealtimeManagement:020006": "Bu organizasyon için aktif gerçek zamanlı kaynak gereklidir.",
+    "GtfsRealtimeManagement:030001": "Akış yanıtı GTFS-RT protobuf olarak çözülemedi.",
+    "GtfsRealtimeManagement:030002": "Akışın sürümü ya da artımlılık türü desteklenmiyor.",
     "ActivityLogs:LookupUpdated": "Gerçek zamanlı lookup kaydı güncellendi.",
     "ActivityLogs:LookupDeleted": "Gerçek zamanlı lookup kaydı silindi.",
     "ActivityLogs:RealtimeSourceUpdated": "Gerçek zamanlı kaynak güncellendi.",
+    "ActivityLogs:RealtimeSourceActivated": "Gerçek zamanlı kaynak etkinleştirildi.",
     "ActivityLogs:RealtimeSourceDeleted": "Gerçek zamanlı kaynak silindi."
   }
 }

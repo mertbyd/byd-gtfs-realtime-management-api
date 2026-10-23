@@ -214,6 +214,11 @@ namespace Byd.GtfsRealtimeManagement.Migrations
                     b.HasKey("Id")
                         .HasName("pk_realtime_sources");
 
+                    b.HasIndex("TenantId", "OrganizationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RealtimeSources_Active_Organization")
+                        .HasFilter("is_active = true");
+
                     b.HasIndex("TenantId", "OrganizationId", "Name")
                         .IsUnique()
                         .HasDatabaseName("IX_RealtimeSources_Scope_Name");

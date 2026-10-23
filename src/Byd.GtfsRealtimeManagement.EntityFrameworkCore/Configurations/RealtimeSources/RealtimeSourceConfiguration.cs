@@ -17,5 +17,8 @@ public sealed class RealtimeSourceConfiguration : IEntityTypeConfiguration<Realt
         builder.ConfigureByConvention();
         builder.HasIndex(source => new { source.TenantId, source.OrganizationId, source.Name })
             .IsUnique().HasDatabaseName(RealtimeSourceConsts.NameIndex);
+        builder.HasIndex(source => new { source.TenantId, source.OrganizationId })
+            .IsUnique().HasFilter("is_active = true")
+            .HasDatabaseName(RealtimeSourceConsts.ActiveOrganizationIndex);
     }
 }

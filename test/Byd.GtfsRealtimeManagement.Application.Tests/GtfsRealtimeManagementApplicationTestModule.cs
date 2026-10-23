@@ -1,4 +1,5 @@
-﻿using Volo.Abp.Modularity;
+﻿using Volo.Abp.BackgroundWorkers;
+using Volo.Abp.Modularity;
 
 namespace Byd.GtfsRealtimeManagement;
 
@@ -8,5 +9,9 @@ namespace Byd.GtfsRealtimeManagement;
     )]
 public class GtfsRealtimeManagementApplicationTestModule : AbpModule
 {
-
+    // Cekme iscisi testlerde baslamaz; testlerin olusturdugu aktif kaynaklarin adreslerine istek atilmaz.
+    public override void ConfigureServices(ServiceConfigurationContext context)
+    {
+        Configure<AbpBackgroundWorkerOptions>(options => options.IsEnabled = false);
+    }
 }
