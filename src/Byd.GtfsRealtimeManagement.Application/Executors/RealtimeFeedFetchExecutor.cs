@@ -4,7 +4,9 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Distributed;
 using Byd.CoreExtensions.Interfaces;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Managers.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.RealtimeFeeds;
 using Volo.Abp.Caching;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.MultiTenancy;
@@ -18,14 +20,15 @@ namespace Byd.GtfsRealtimeManagement.Executors;
 /// </summary>
 // islevi: Hedefin tenant ve organizasyon kapsamina girer; araligi dolmus akisi isaretleyip okuyucuya ceker.
 // sistemdeki gorevi: Cekme iscisinin her hedef icin calistirdigi adimdir. Aralik organizasyon ayarindan, cagrinin kaydi ve kapsami
-// log modulunde bu kapsamdan yazilir.
+// log modulunde bu kapsamdan yazilir. Arac konumu akisinda kayitli olmayan araclar icin arac modulunden kayit istenir.
 public class RealtimeFeedFetchExecutor(
     IRealtimeFeedReader reader,
     ISettingProvider settingProvider,
     IDistributedCache<RealtimeFeedFetchCacheItem> fetchCache,
     IClock clock,
     ICurrentTenant currentTenant,
-    ICurrentOrganization currentOrganization) : ITransientDependency
+    ICurrentOrganization currentOrganization,
+    RealtimeSnapshotManager snapshotManager) : ITransientDependency
 {
     // Kaynagin kapsaminda, aralik dolduysa akisi ceker.
     public virtual async Task FetchAsync(RealtimeFeedTargetModel target, CancellationToken cancellationToken = default)
@@ -35,7 +38,9 @@ public class RealtimeFeedFetchExecutor(
         if (!await TryMarkDueAsync(target, cancellationToken))
             return;
 
-        await reader.ReadAsync(target.SourceName, target.Url, cancellationToken);
+        var message = await reader.ReadAsync(target.SourceName, target.Url, cancellationToken);
+        if (target.FeedType == RealtimeFeedType.VehiclePositions)
+            await snapshotManager.RequestUnregisteredVehiclesAsync(message, cancellationToken);
     }
 
     // Akisin araligi icindeki ilk cagriyi isaretler; isaret durdukca ayni akis yeniden cekilmez, cekme hata verse de beklenir.
