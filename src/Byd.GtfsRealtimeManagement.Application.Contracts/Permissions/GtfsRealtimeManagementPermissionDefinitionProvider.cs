@@ -13,6 +13,7 @@ public partial class GtfsRealtimeManagementPermissionDefinitionProvider : Permis
             L(GtfsRealtimeManagementLocalizationKeys.Permissions.Group));
         AddLookupPermissions(group);
         AddRealtimeSourcePermissions(group);
+        AddRealtimeStopTimePermissions(group);
     }
 
     private static LocalizableString L(string name)
