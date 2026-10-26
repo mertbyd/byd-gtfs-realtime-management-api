@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,14 @@ public class EfCoreRealtimeStopTimeRepository(
     public virtual async Task<RealtimeStopTime?> FindWithLookupsAsync(
         Guid id, CancellationToken cancellationToken = default)
         => await WithLookups(await GetQueryableAsync()).FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+
+    // Kaynagin servis gunundeki verilen seferlerinin satirlarini isleme adiminin guncellemesi icin izlenir sekilde getirir.
+    public virtual async Task<List<RealtimeStopTime>> GetListForTripsAsync(Guid realtimeSourceId, DateOnly serviceDate,
+        IReadOnlyCollection<string> gtfsTripIds, CancellationToken cancellationToken = default)
+        => await (await GetQueryableAsync())
+            .Where(value => value.RealtimeSourceId == realtimeSourceId && value.ServiceDate == serviceDate
+                && gtfsTripIds.Contains(value.GtfsTripId))
+            .ToListAsync(cancellationToken);
 
     // Core DataTable sorgusuna sayfa materialize edilmeden lookup iliskilerini ekler.
     protected override async Task<IQueryable<RealtimeStopTime>> CreateFilteredQueryAsync<TFiltering>(

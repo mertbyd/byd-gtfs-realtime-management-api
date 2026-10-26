@@ -11,6 +11,7 @@ using Byd.GtfsRealtimeManagement.ExceptionCodes;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
+using Byd.GtfsRealtimeManagement.Models.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Stores.RealtimeSnapshots;
 using Volo.Abp;
 using Volo.Abp.Domain.Services;
@@ -90,6 +91,52 @@ public class RealtimeSnapshotManager(
         return service.StartDate <= serviceDate && serviceDate <= service.EndDate
             && RunsOn(service, serviceDate.DayOfWeek);
     }
+
+    // Akistaki seferin planda hangi servis gununun ornegi oldugunu bulur. start_date geldiyse o gun takvimle dogrulanir;
+    // gelmediyse olcum anindaki yerel gun ve gece yarisini asan seferler icin bir onceki gun, takvim ve seferin planlanan
+    // saat araligiyla denenir. Sefer planda yoksa ya da o gun calismiyorsa bos doner.
+    public virtual RealtimeTripInstanceModel? ResolveTripInstance(
+        RealtimePlanSnapshotModel plan, TripDescriptorModel trip, DateTime measuredAtUtc)
+    {
+        if (trip.TripId is not { } tripId || !plan.Trips.TryGetValue(tripId, out var planned))
+            return null;
+        var local = TimeZoneInfo.ConvertTimeFromUtc(measuredAtUtc, FindTimeZone(planned.Timezone));
+        var today = DateOnly.FromDateTime(local);
+        var hasStartDate = DateOnly.TryParseExact(trip.StartDate, "yyyyMMdd", out var startDate);
+        foreach (var date in hasStartDate ? [startDate] : new[] { today, today.AddDays(-1) })
+            if (IsTripScheduled(plan, tripId, date) && (hasStartDate || IsWithinTripWindow(planned, date, local)))
+                return new RealtimeTripInstanceModel { Trip = planned, ServiceDate = date, StartTime = trip.StartTime };
+        return null;
+    }
+
+    // Sefer orneginin anahtari; arac ziyareti sefer degisince bu anahtarla sifirlanir.
+    public virtual string GetTripKey(RealtimeTripInstanceModel instance)
+        => $"{instance.Trip.GtfsTripId}|{instance.ServiceDate:yyyyMMdd}|{instance.StartTime}";
+
+    // Sefer orneginin tek duraginin anahtari; TripUpdates durumu bu anahtarla tutulur.
+    public virtual string GetStopKey(RealtimeTripInstanceModel instance, int stopSequence)
+        => $"{GetTripKey(instance)}|{stopSequence}";
+
+    // Olcum ani seferin ilk kalkisindan 30 dk once ile son varisindan 60 dk sonrasi arasinda mi; GTFS saatleri servis
+    // gunu gece yarisindan sayilir ve 24:00'u asabilir.
+    private static bool IsWithinTripWindow(RealtimeTripSnapshotModel trip, DateOnly serviceDate, DateTime local)
+    {
+        if (ParseGtfsTime(trip.StopTimes.FirstOrDefault()?.DepartureTime) is not { } start
+            || ParseGtfsTime(trip.StopTimes.LastOrDefault()?.ArrivalTime) is not { } end)
+            return false;
+        var midnight = serviceDate.ToDateTime(TimeOnly.MinValue);
+        return local >= midnight + start - TimeSpan.FromMinutes(30) && local <= midnight + end + TimeSpan.FromMinutes(60);
+    }
+
+    // "HH:MM:SS" GTFS saatini gece yarisindan gecen sureye cevirir; saat 24'u asabilir.
+    private static TimeSpan? ParseGtfsTime(string? value)
+        => value?.Split(':') is [var hours, var minutes, var seconds]
+            ? new TimeSpan(int.Parse(hours), int.Parse(minutes), int.Parse(seconds))
+            : null;
+
+    // Isletmecinin saat dilimini bulur; tanimsiz ya da gecersizse UTC kullanilir.
+    private static TimeZoneInfo FindTimeZone(string? timezone)
+        => timezone is not null && TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out var zone) ? zone : TimeZoneInfo.Utc;
 
     // Araclari ve aktif plani okuyup organizasyon kopyasini kurar.
     private async Task<RealtimeOrganizationSnapshotModel> LoadAsync(

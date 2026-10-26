@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Byd.CoreExtensions.Interfaces;
@@ -11,4 +12,7 @@ namespace Byd.GtfsRealtimeManagement.Interfaces.RealtimeStopTimes;
 public interface IRealtimeStopTimeRepository : IExtendedRepository<RealtimeStopTime>
 {
     Task<RealtimeStopTime?> FindWithLookupsAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<List<RealtimeStopTime>> GetListForTripsAsync(Guid realtimeSourceId, DateOnly serviceDate,
+        IReadOnlyCollection<string> gtfsTripIds, CancellationToken cancellationToken = default);
 }

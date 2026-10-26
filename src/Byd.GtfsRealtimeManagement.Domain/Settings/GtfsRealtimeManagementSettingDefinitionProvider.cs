@@ -1,4 +1,4 @@
-﻿using Volo.Abp.Settings;
+using Volo.Abp.Settings;
 
 namespace Byd.GtfsRealtimeManagement.Settings;
 
@@ -13,5 +13,6 @@ public partial class GtfsRealtimeManagementSettingDefinitionProvider : SettingDe
     public override void Define(ISettingDefinitionContext context)
     {
         AddFetchSettings(context);
+        AddProcessingSettings(context);
     }
 }

@@ -12,5 +12,9 @@ public class RealtimeTripSnapshotModel
     public string GtfsRouteId { get; set; } = default!;
     public int RouteType { get; set; }
     public string? GtfsAgencyId { get; set; }
+
+    // Isletmecinin IANA saat dilimi; servis gunu ve planlanan saatler bu dilimde okunur.
+    public string? Timezone { get; set; }
+
     public List<RealtimeStopTimeSnapshotModel> StopTimes { get; set; } = [];
 }

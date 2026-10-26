@@ -9,6 +9,10 @@ public static class StopScheduleRelationshipConsts
     public const string TableName = "StopScheduleRelationships";
     public const string CodeIndex = "IX_StopScheduleRelationships_Code";
 
+    // GTFS-RT StopTimeUpdate.ScheduleRelationship kodlari.
+    public const int ScheduledCode = 0;
+    public const int SkippedCode = 1;
+
     public static readonly IReadOnlyList<(int Id, string Name, int Code)> Definitions =
     [
         (1, "Planlı", 0),

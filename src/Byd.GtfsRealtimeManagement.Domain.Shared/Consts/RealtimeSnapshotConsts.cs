@@ -23,7 +23,7 @@ public static class RealtimeSnapshotConsts
 
     public const string TripsSql = """
         select t.gtfs_trip_id as GtfsTripId, sv.gtfs_service_id as GtfsServiceId, r.gtfs_route_id as GtfsRouteId,
-               rt.code as RouteType, a.gtfs_agency_id as GtfsAgencyId
+               rt.code as RouteType, a.gtfs_agency_id as GtfsAgencyId, a.timezone as Timezone
         from gtfs_management."Trips" t
         join gtfs_management."Services" sv on sv.id = t.service_id
         join gtfs_management."Routes" r on r.id = t.route_id

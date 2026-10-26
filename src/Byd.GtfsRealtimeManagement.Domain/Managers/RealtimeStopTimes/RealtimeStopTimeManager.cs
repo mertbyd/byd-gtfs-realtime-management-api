@@ -9,6 +9,7 @@ using Byd.GtfsRealtimeManagement.Entities.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Interfaces;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Managers.RealtimeSources;
+using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStopTimes;
 using Volo.Abp;
 using Volo.Abp.Data;
@@ -82,6 +83,55 @@ public class RealtimeStopTimeManager(
             Operator = DataTableFilterOperator.Equal,
             Value = realtimeSourceId.ToString()
         };
+    }
+
+    // Isleme adiminin ilk kez gordugu sefer orneginin duragi icin satir kurar; durum kimlikleri lookup tablosundan gelir.
+    public virtual RealtimeStopTime CreateProcessed(Guid realtimeSourceId, Guid gtfsFeedId,
+        RealtimeTripInstanceModel instance, RealtimeStopTimeSnapshotModel stop,
+        int tripScheduleRelationshipId, int stopScheduleRelationshipId)
+        => new(GuidGenerator.Create(), realtimeSourceId)
+        {
+            GtfsFeedId = gtfsFeedId,
+            ServiceDate = instance.ServiceDate,
+            StartTime = instance.StartTime,
+            GtfsTripId = instance.Trip.GtfsTripId,
+            GtfsRouteId = instance.Trip.GtfsRouteId,
+            StopSequence = stop.StopSequence,
+            GtfsStopId = stop.GtfsStopId ?? string.Empty,
+            TripScheduleRelationshipId = tripScheduleRelationshipId,
+            StopScheduleRelationshipId = stopScheduleRelationshipId
+        };
+
+    // Aracin duraga girisini, konumunu ve akisin bildirdigi durak durumunu kanit correlation'iyla yazar.
+    public virtual void ApplyArrival(RealtimeStopTime entity, DateTime arrivalTime, double latitude, double longitude,
+        Guid? vehicleId, int? vehicleStopStatusId, string correlationId)
+    {
+        entity.ArrivalTime = arrivalTime;
+        entity.Latitude = latitude;
+        entity.Longitude = longitude;
+        entity.VehicleId = vehicleId ?? entity.VehicleId;
+        entity.VehicleStopStatusId = vehicleStopStatusId;
+        entity.ArrivalCorrelationId = correlationId;
+    }
+
+    // Aracin duraktan cikisini ya da duragi gectigini yazar; durmadan gecilen durakta cikis zamani bos kalir. Kaynagin
+    // arac ayrilmadan once bildirdigi son gecikme de bu anda yazilir.
+    public virtual void ApplyDeparture(RealtimeStopTime entity, DateTime? departureTime, Guid? vehicleId,
+        int? reportedDelay, string correlationId)
+    {
+        entity.DepartureTime = departureTime;
+        entity.VehicleId = vehicleId ?? entity.VehicleId;
+        entity.ReportedDelay = reportedDelay ?? entity.ReportedDelay;
+        entity.DepartureCorrelationId = correlationId;
+    }
+
+    // Sefer ve durak planlama durumunu kanit correlation'iyla yazar.
+    public virtual void ApplyStatus(RealtimeStopTime entity, int tripScheduleRelationshipId,
+        int stopScheduleRelationshipId, string correlationId)
+    {
+        entity.TripScheduleRelationshipId = tripScheduleRelationshipId;
+        entity.StopScheduleRelationshipId = stopScheduleRelationshipId;
+        entity.StatusCorrelationId = correlationId;
     }
 
     // Girdi alanlarini uygular ve sefer ornegi/durak sirasini tekillestirir.
