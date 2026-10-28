@@ -117,20 +117,22 @@ public class RealtimeStopTimeManager(
     // Aracin duraktan cikisini ya da duragi gectigini yazar; durmadan gecilen durakta cikis zamani bos kalir. Kaynagin
     // arac ayrilmadan once bildirdigi son gecikme de bu anda yazilir.
     public virtual void ApplyDeparture(RealtimeStopTime entity, DateTime? departureTime, Guid? vehicleId,
-        int? reportedDelay, string correlationId)
+        int? reportedDelay, int? violationTypeId, string correlationId)
     {
         entity.DepartureTime = departureTime;
         entity.VehicleId = vehicleId ?? entity.VehicleId;
         entity.ReportedDelay = reportedDelay ?? entity.ReportedDelay;
+        entity.ViolationTypeId = violationTypeId ?? entity.ViolationTypeId;
         entity.DepartureCorrelationId = correlationId;
     }
 
     // Sefer ve durak planlama durumunu kanit correlation'iyla yazar.
     public virtual void ApplyStatus(RealtimeStopTime entity, int tripScheduleRelationshipId,
-        int stopScheduleRelationshipId, string correlationId)
+        int stopScheduleRelationshipId, int? violationTypeId, string correlationId)
     {
         entity.TripScheduleRelationshipId = tripScheduleRelationshipId;
         entity.StopScheduleRelationshipId = stopScheduleRelationshipId;
+        entity.ViolationTypeId = violationTypeId ?? entity.ViolationTypeId;
         entity.StatusCorrelationId = correlationId;
     }
 

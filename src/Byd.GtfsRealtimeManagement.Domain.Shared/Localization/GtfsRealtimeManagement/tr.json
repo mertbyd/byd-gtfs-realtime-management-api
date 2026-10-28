@@ -22,6 +22,8 @@
     "GtfsRealtimeManagement:020004": "Akış adresi mutlak HTTP veya HTTPS adresi olmalıdır.",
     "GtfsRealtimeManagement:020005": "Kaynakta bu akışın adresi tanımlı değil.",
     "GtfsRealtimeManagement:020006": "Bu organizasyon için aktif gerçek zamanlı kaynak gereklidir.",
+    "GtfsRealtimeManagement:020007": "Gerçek zamanlı kaynak etkinleştirilmeden önce organizasyonun aktif statik GTFS feed'i olmalıdır.",
+    "GtfsRealtimeManagement:020008": "{FeedType} akışındaki sefer, hat ve durak kimliklerinin hiçbiri aktif GTFS feed'inde yok; akış başka bir veri setine ait.",
     "GtfsRealtimeManagement:030001": "Akış yanıtı GTFS-RT protobuf olarak çözülemedi.",
     "GtfsRealtimeManagement:030002": "Akışın sürümü ya da artımlılık türü desteklenmiyor.",
     "GtfsRealtimeManagement:040001": "Statik GTFS feed kimliği zorunludur.",

@@ -36,10 +36,13 @@ public class DapperRealtimeSnapshotRepository(IDbContextProvider<GtfsRealtimeMan
         if (feedId is null)
             return null;
 
+        var trips = await GetTripsAsync(feedId.Value, cancellationToken);
         return new RealtimePlanSnapshotModel
         {
             FeedId = feedId.Value,
-            Trips = await GetTripsAsync(feedId.Value, cancellationToken),
+            Trips = trips,
+            RouteIds = trips.Values.Select(trip => trip.GtfsRouteId).ToHashSet(),
+            AgencyIds = trips.Values.Select(trip => trip.GtfsAgencyId).OfType<string>().ToHashSet(),
             StopIds = (await QueryAsync<string>(RealtimeSnapshotConsts.StopIdsSql, new { feedId }, cancellationToken))
                 .ToHashSet(),
             Services = await GetServicesAsync(feedId.Value, cancellationToken)

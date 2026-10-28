@@ -1,9 +1,9 @@
 using System;
 
-namespace Byd.GtfsRealtimeManagement.Models.VehicleStreams;
+namespace Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
 
 // islevi: Aracin son konumunu, seferini, hattini ve seferdeki durak ilerleyisini tasir.
-// sistemdeki gorevi: Her arac konumu cekmesinden sonra organizasyona giden bildirimin aciklamasina JSON olarak yazilir;
+// sistemdeki gorevi: Her arac konumu cekmesinden sonra organizasyona giden canli akisin govdesine JSON olarak yazilir;
 // harita butun listeyi, secili arac ekrani listeden kendi aracini kullanir.
 public class RealtimeVehicleStreamModel
 {

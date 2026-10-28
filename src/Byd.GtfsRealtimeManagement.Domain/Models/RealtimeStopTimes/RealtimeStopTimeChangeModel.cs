@@ -22,4 +22,7 @@ public class RealtimeStopTimeChangeModel
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public int? VehicleStopStatusCode { get; set; }
+
+    // Degisikligin satira yazdigi ihlal kodu: iptal edilen sefer, atlanan durak, erken ya da gec kalkis.
+    public int? ViolationTypeCode { get; set; }
 }

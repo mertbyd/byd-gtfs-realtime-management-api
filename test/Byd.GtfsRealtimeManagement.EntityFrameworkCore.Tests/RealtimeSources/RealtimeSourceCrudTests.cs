@@ -1,11 +1,16 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Byd.CoreExtensions.ExceptionCodes;
 using Byd.CoreExtensions.Interfaces;
 using Byd.CoreExtensions.Querying;
 using Byd.GtfsRealtimeManagement.Dtos.RealtimeSources;
 using Byd.GtfsRealtimeManagement.ExceptionCodes;
+using Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Interfaces.RealtimeSnapshots;
+using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Services.RealtimeSources;
 using Volo.Abp;
 using Volo.Abp.MultiTenancy;
@@ -23,6 +28,34 @@ public class RealtimeSourceCrudTests : GtfsRealtimeManagementEntityFrameworkCore
     private ICurrentTenant CurrentTenant => ServiceProvider.GetRequiredService<ICurrentTenant>();
     private ICurrentOrganization CurrentOrganization => ServiceProvider.GetRequiredService<ICurrentOrganization>();
     private IRealtimeSourceAppService SourceService => ServiceProvider.GetRequiredService<IRealtimeSourceAppService>();
+
+    [Fact]
+    public async Task Activate_RejectsFeedOfAnotherDataset_AndRequiresActiveGtfsFeed()
+    {
+        using var tenant = CurrentTenant.Change(TenantId);
+        using var organization = CurrentOrganization.Change(OrganizationId);
+        var source = await WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("Vilnius")));
+        ServiceProvider.GetRequiredService<IRealtimeFeedReader>().ReadAsync(default!, default!, default).ReturnsForAnyArgs(
+            new FeedMessageModel
+            {
+                Header = new FeedHeaderModel { GtfsRealtimeVersion = "2.0" },
+                Entity = [new FeedEntityModel { Id = "1", Vehicle = new VehiclePositionModel { Trip = new TripDescriptorModel { TripId = "X" } } }]
+            });
+
+        var mismatch = await Assert.ThrowsAsync<BusinessException>(() =>
+            WithUnitOfWorkAsync(() => SourceService.ActivateAsync(source.Id)));
+        Assert.Equal(RealtimeSourceExceptionCodes.FeedPlanMismatch, mismatch.Code);
+
+        using (CurrentOrganization.Change(OtherOrganizationId))
+        {
+            ServiceProvider.GetRequiredService<IRealtimeSnapshotRepository>()
+                .GetActivePlanAsync(default, default, default).ReturnsForAnyArgs((RealtimePlanSnapshotModel?)null);
+            var other = await WithUnitOfWorkAsync(() => SourceService.CreateAsync(NewSource("Kaunas")));
+            var noPlan = await Assert.ThrowsAsync<BusinessException>(() =>
+                WithUnitOfWorkAsync(() => SourceService.ActivateAsync(other.Id)));
+            Assert.Equal(RealtimeSourceExceptionCodes.GtfsFeedRequired, noPlan.Code);
+        }
+    }
 
     [Fact]
     public async Task SourceService_CreatesReadsUpdatesAndDeletes_InOrganization()

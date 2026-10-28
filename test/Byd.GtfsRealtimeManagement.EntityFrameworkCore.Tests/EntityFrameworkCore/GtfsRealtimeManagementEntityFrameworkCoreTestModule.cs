@@ -4,7 +4,12 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using NSubstitute;
 using Byd.CoreExtensions.Options;
+using Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Interfaces.RealtimeSnapshots;
+using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Volo.Abp.Data;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.Sqlite;
@@ -34,6 +39,16 @@ public class GtfsRealtimeManagementEntityFrameworkCoreTestModule : AbpModule
         context.Services.Replace(ServiceDescriptor.Transient<IConnectionStringResolver, DefaultConnectionStringResolver>());
         // Ayar tablolari da SQLite'ta yoktur; ayarlar tanimdaki varsayilan degerleriyle okunur.
         context.Services.Replace(ServiceDescriptor.Singleton<ISettingStore, NullSettingStore>());
+        // Gercek akis adresi ve ortak veritabanindaki GTFS plani testte yoktur: okuyucu bos akis, plan deposu bos plan dondurur.
+        // Akis ya da plan isteyen test siniflari kendi sahtelerini kurar.
+        var reader = Substitute.For<IRealtimeFeedReader>();
+        reader.ReadAsync(default!, default!, default).ReturnsForAnyArgs(
+            new FeedMessageModel { Header = new FeedHeaderModel { GtfsRealtimeVersion = "2.0" } });
+        context.Services.Replace(ServiceDescriptor.Singleton(reader));
+        var snapshots = Substitute.For<IRealtimeSnapshotRepository>();
+        snapshots.GetVehiclesAsync(default, default, default).ReturnsForAnyArgs([]);
+        snapshots.GetActivePlanAsync(default, default, default).ReturnsForAnyArgs(new RealtimePlanSnapshotModel());
+        context.Services.Replace(ServiceDescriptor.Singleton(snapshots));
 
         var sqliteConnection = CreateDatabaseAndGetConnection();
 

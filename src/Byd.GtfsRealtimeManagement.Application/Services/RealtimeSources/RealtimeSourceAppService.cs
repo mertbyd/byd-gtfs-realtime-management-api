@@ -85,6 +85,7 @@ public class RealtimeSourceAppService : GtfsRealtimeManagementAppService, IRealt
     public virtual async Task<RealtimeSourceDto> ActivateAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var source = await Manager.EnsureExistsIncludingInactiveInScopeAsync(id, cancellationToken);
+        await Manager.EnsureMatchesPlanAsync(source, cancellationToken);
         await LocalEventBus.PublishAsync(new RealtimeSourceActivationRequestedEto
         {
             TenantId = source.TenantId!.Value,

@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Concurrent;
+using Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
 
 namespace Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 
 // islevi: Bir organizasyonun arac eslemesini, kayit istegi bekleyen araclarini, araclarin sefer ilerleyisini, TripUpdates
-// durumlarini ve aktif plan kopyasini tasir.
+// durumlarini, istemciye son gonderilen sefer tahminlerini ve aktif plan kopyasini tasir.
 // sistemdeki gorevi: Cekme iscisi ile olay handler'larinin ayni anda okuyup yazdigi bellek kopyasidir.
 public class RealtimeOrganizationSnapshotModel
 {
@@ -19,6 +20,12 @@ public class RealtimeOrganizationSnapshotModel
 
     // Sefer ornegi ve durak anahtari ile TripUpdates akisinin bildirdigi son durum.
     public ConcurrentDictionary<string, RealtimeStopStatusModel> StopStatuses { get; } = new();
+
+    // Sefer ornegi anahtari ile istemciye son gonderilen sefer tahmini; yalniz degisen seferi gondermek icindir.
+    public ConcurrentDictionary<string, RealtimeTripUpdateStreamModel> SentTripUpdates { get; } = new();
+
+    // Sefer tahminlerinin son kez tam liste olarak gonderildigi an, UTC; bossa ilk cekmede tam liste gider.
+    public DateTime? TripUpdatesFullDatasetSentAt { get; set; }
 
     // Organizasyonun aktif GTFS feed plani; aktif feed yoksa bos.
     public RealtimePlanSnapshotModel? Plan { get; set; }

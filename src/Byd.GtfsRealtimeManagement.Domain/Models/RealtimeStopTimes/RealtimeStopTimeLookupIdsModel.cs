@@ -9,4 +9,5 @@ public class RealtimeStopTimeLookupIdsModel
     public Dictionary<int, int> TripScheduleRelationships { get; set; } = [];
     public Dictionary<int, int> StopScheduleRelationships { get; set; } = [];
     public Dictionary<int, int> VehicleStopStatuses { get; set; } = [];
+    public Dictionary<int, int> ViolationTypes { get; set; } = [];
 }

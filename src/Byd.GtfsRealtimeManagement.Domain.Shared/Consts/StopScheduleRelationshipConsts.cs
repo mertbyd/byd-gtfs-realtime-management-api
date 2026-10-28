@@ -12,6 +12,7 @@ public static class StopScheduleRelationshipConsts
     // GTFS-RT StopTimeUpdate.ScheduleRelationship kodlari.
     public const int ScheduledCode = 0;
     public const int SkippedCode = 1;
+    public const int NoDataCode = 2;
 
     public static readonly IReadOnlyList<(int Id, string Name, int Code)> Definitions =
     [

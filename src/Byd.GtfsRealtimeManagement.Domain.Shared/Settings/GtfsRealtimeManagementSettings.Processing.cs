@@ -3,7 +3,7 @@ namespace Byd.GtfsRealtimeManagement.Settings;
 /// <summary>
 /// GTFS-RT akisinin islenmesindeki durak ve bayatlik esiklerinin ayar adlarini tanimlar.
 /// </summary>
-// islevi: Aracin durakta sayilma kurali ve bayat akis esiginin ayar adlarini tanimlar.
+// islevi: Aracin durakta sayilma kurali, bayat akis esigi ve erken/gec kalkis toleranslarinin ayar adlarini tanimlar.
 // sistemdeki gorevi: Isleme adimi bu adlari kaynagin kapsaminda okur; organizasyon, tenant ve global seviyede
 // degistirilebilir.
 public partial class GtfsRealtimeManagementSettings
@@ -20,5 +20,11 @@ public partial class GtfsRealtimeManagementSettings
 
         // Baslik zamani bundan eski akis bayat sayilir ve islenmez, saniye.
         public const string StaleFeedSeconds = Default + ".StaleFeedSeconds";
+
+        // Planlanan kalkistan bu kadar once kalkan arac erken kalkis ihlali sayilir, saniye.
+        public const string EarlyDepartureToleranceSeconds = Default + ".EarlyDepartureToleranceSeconds";
+
+        // Planlanan kalkistan bu kadar sonra kalkan arac gec kalkis ihlali sayilir, saniye.
+        public const string LateDepartureToleranceSeconds = Default + ".LateDepartureToleranceSeconds";
     }
 }

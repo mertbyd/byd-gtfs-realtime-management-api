@@ -1,22 +1,18 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Distributed;
 using Byd.CoreExtensions.Interfaces;
-using Byd.GtfsRealtimeManagement.Consts;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Managers.RealtimeServiceAlerts;
 using Byd.GtfsRealtimeManagement.Managers.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
-using Byd.GtfsRealtimeManagement.Models.VehicleStreams;
+using Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
 using Byd.GtfsRealtimeManagement.RealtimeFeeds;
-using Byd.LogManagement.Consts;
-using Byd.LogManagement.Dtos.Notifications;
 using Byd.LogManagement.Interfaces.Notifications;
 using Volo.Abp.Caching;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Guids;
-using Volo.Abp.Json;
 using Volo.Abp.MultiTenancy;
 using Volo.Abp.Settings;
 using Volo.Abp.Timing;
@@ -30,8 +26,9 @@ namespace Byd.GtfsRealtimeManagement.Executors;
 // islevi: Hedefin tenant ve organizasyon kapsamina girer; araligi dolmus akisi isaretleyip okuyucuya ceker.
 // sistemdeki gorevi: Cekme iscisinin her hedef icin calistirdigi adimdir. Aralik organizasyon ayarindan, cagrinin kaydi ve kapsami
 // log modulunde bu kapsamdan yazilir. Her cekme kendi correlation kimligiyle yapilir; ham kayit ve islenmis durak satiri
-// ayni kimligi tasir. Arac konumu ve sefer guncellemesi akislari isleme adimina verilir; araclarin son durumu log
-// modulunun web bildirimiyle organizasyona itilir, istemci istek atmaz.
+// ayni kimligi tasir. Her akis kendi isleme adimina verilir; araclarin son durumu, seferlerin tahmini durak zamanlari ve
+// gecerli servis uyarilari log modulunun canli akisiyla, akis turunun adini tasiyarak organizasyona itilir. Canli akis kalici
+// degildir: olay kutusuna ve bildirim tablosuna yazilmaz, kacan mesajin yerini bir sonraki alir; istemci istek atmaz.
 public class RealtimeFeedFetchExecutor(
     IRealtimeFeedReader reader,
     ISettingProvider settingProvider,
@@ -42,8 +39,8 @@ public class RealtimeFeedFetchExecutor(
     ICorrelationIdProvider correlationIdProvider,
     IGuidGenerator guidGenerator,
     RealtimeStopTimeProcessingManager processingManager,
-    INotificationLogger notificationLogger,
-    IJsonSerializer jsonSerializer) : ITransientDependency
+    RealtimeServiceAlertManager serviceAlertManager,
+    INotificationLogger notificationLogger) : ITransientDependency
 {
     // Kaynagin kapsaminda, aralik dolduysa akisi ceker.
     public virtual async Task FetchAsync(RealtimeFeedTargetModel target, CancellationToken cancellationToken = default)
@@ -57,32 +54,22 @@ public class RealtimeFeedFetchExecutor(
         using var correlationScope = correlationIdProvider.Change(correlationId);
         var message = await reader.ReadAsync(target.SourceName, target.Url, cancellationToken);
         if (target.FeedType == RealtimeFeedType.VehiclePositions)
-            await NotifyVehiclesAsync(target, await processingManager.ProcessVehiclePositionsAsync(
+            await StreamAsync(target, await processingManager.ProcessVehiclePositionsAsync(
                 target.SourceId, message, correlationId, cancellationToken), cancellationToken);
         else if (target.FeedType == RealtimeFeedType.TripUpdates)
-            await processingManager.ProcessTripUpdatesAsync(target.SourceId, message, correlationId, cancellationToken);
+            await StreamAsync(target, await processingManager.ProcessTripUpdatesAsync(
+                target.SourceId, message, correlationId, cancellationToken), cancellationToken);
+        else if (target.FeedType == RealtimeFeedType.ServiceAlerts)
+            await StreamAsync(target, await serviceAlertManager.ProcessAsync(message, cancellationToken), cancellationToken);
     }
 
-    // Araclarin son durumunu organizasyona yayin bildirimiyle iletir; bayat akista liste bos oldugu icin bir sey gitmez.
-    private Task NotifyVehiclesAsync(RealtimeFeedTargetModel target, List<RealtimeVehicleStreamModel> vehicles,
+    // Islenmis listeyi organizasyona canli akisla iletir. Bos tam liste de gider ki istemci elindekini temizlesin; bayat akista
+    // ya da degisiklik yokken bos kismi liste gitmez.
+    private Task StreamAsync<TEntity>(RealtimeFeedTargetModel target, RealtimeStreamModel<TEntity> stream,
         CancellationToken cancellationToken = default)
-    {
-        if (vehicles.Count == 0)
-            return Task.CompletedTask;
-
-        var json = jsonSerializer.Serialize(vehicles);
-        return notificationLogger.NotifyAsync(new NotificationRecord(
-            [NotificationConsts.WebChannelCode], VehicleStreamConsts.NotificationTitle,
-            new Dictionary<string, string>
-            {
-                [VehicleStreamConsts.TurkishLanguageCode] = json,
-                [VehicleStreamConsts.EnglishLanguageCode] = json
-            })
-        {
-            ExternalId = target.SourceId,
-            IsTenantNotification = true
-        }, cancellationToken);
-    }
+        => stream is { IsFullDataset: false, Entities.Count: 0 }
+            ? Task.CompletedTask
+            : notificationLogger.StreamAsync(target.FeedType.ToString(), stream, cancellationToken);
 
     // Akisin araligi icindeki ilk cagriyi isaretler; isaret durdukca ayni akis yeniden cekilmez, cekme hata verse de beklenir.
     private async Task<bool> TryMarkDueAsync(

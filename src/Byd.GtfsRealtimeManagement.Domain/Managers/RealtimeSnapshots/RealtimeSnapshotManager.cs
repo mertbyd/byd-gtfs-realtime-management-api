@@ -117,6 +117,29 @@ public class RealtimeSnapshotManager(
     public virtual string GetStopKey(RealtimeTripInstanceModel instance, int stopSequence)
         => $"{GetTripKey(instance)}|{stopSequence}";
 
+    // Uyari secicisinin plana atif yaptigi her kimligin (isletmeci, hat, sefer, durak) planda karsiligi var mi. GTFS-RT'ye
+    // gore secicide en az bir alan dolu olmalidir ve yon yalniz hatla birlikte anlamlidir; aksi secici gecersizdir.
+    public virtual bool IsInPlan(RealtimePlanSnapshotModel plan, EntitySelectorModel selector)
+    {
+        if (selector is { AgencyId: null, RouteId: null, RouteType: null, Trip: null, StopId: null }
+            || (selector.DirectionId is not null && selector.RouteId is null))
+            return false;
+        return (selector.AgencyId is null || plan.AgencyIds.Contains(selector.AgencyId))
+               && (selector.RouteId is null || plan.RouteIds.Contains(selector.RouteId))
+               && (selector.Trip?.TripId is null || plan.Trips.ContainsKey(selector.Trip.TripId))
+               && (selector.StopId is null || plan.StopIds.Contains(selector.StopId));
+    }
+
+    // Sefer orneginin planlanan GTFS saatini UTC ana cevirir. GTFS kurali: saat, servis gununun yerel ogle saatinden 12 saat
+    // oncesinden sayilir; boylece yaz saati gecisi olan gunlerde de dogru an bulunur. Saat bos olabilir (ara durak).
+    public virtual DateTime? GetScheduledTime(RealtimeTripInstanceModel instance, string? gtfsTime)
+    {
+        if (ParseGtfsTime(gtfsTime) is not { } time)
+            return null;
+        var noon = instance.ServiceDate.ToDateTime(new TimeOnly(12, 0));
+        return TimeZoneInfo.ConvertTimeToUtc(noon, FindTimeZone(instance.Trip.Timezone)) - TimeSpan.FromHours(12) + time;
+    }
+
     // Olcum ani seferin ilk kalkisindan 30 dk once ile son varisindan 60 dk sonrasi arasinda mi; GTFS saatleri servis
     // gunu gece yarisindan sayilir ve 24:00'u asabilir.
     private static bool IsWithinTripWindow(RealtimeTripSnapshotModel trip, DateOnly serviceDate, DateTime local)
