@@ -4,6 +4,7 @@ namespace Byd.GtfsRealtimeManagement.Consts;
 // sistemdeki gorevi: DataTable alan adlarini kararli sozlesmede toplar.
 public static class RealtimeStopTimeFilterFields
 {
+    public const string RealtimeSourceId = nameof(RealtimeSourceId);
     public const string ServiceDate = nameof(ServiceDate);
     public const string GtfsTripId = nameof(GtfsTripId);
     public const string GtfsRouteId = nameof(GtfsRouteId);
@@ -12,6 +13,7 @@ public static class RealtimeStopTimeFilterFields
 
     public static class PropertyPaths
     {
+        public const string RealtimeSourceId = RealtimeStopTimeFilterFields.RealtimeSourceId;
         public const string ServiceDate = RealtimeStopTimeFilterFields.ServiceDate;
         public const string GtfsTripId = RealtimeStopTimeFilterFields.GtfsTripId;
         public const string GtfsRouteId = RealtimeStopTimeFilterFields.GtfsRouteId;

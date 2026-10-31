@@ -9,6 +9,12 @@ public static class ViolationTypeConsts
     public const string TableName = "ViolationTypes";
     public const string CodeIndex = "IX_ViolationTypes_Code";
 
+    // Isleme adiminin durak satirina yazdigi ihlal kodlari.
+    public const int CanceledTripCode = 2;
+    public const int SkippedStopCode = 3;
+    public const int EarlyDepartureCode = 4;
+    public const int LateDepartureCode = 5;
+
     public static readonly IReadOnlyList<(int Id, string Name, int Code)> Definitions =
     [
         (1, "Yapılmayan sefer", 1),

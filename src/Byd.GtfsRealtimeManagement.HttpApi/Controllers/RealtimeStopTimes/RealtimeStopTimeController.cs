@@ -57,25 +57,27 @@ public class RealtimeStopTimeController : GtfsRealtimeManagementController
         Guid id, CancellationToken cancellationToken = default)
         => await AppService.GetAsync(id, cancellationToken);
 
-    /// <summary>Pasif kaynak gecmisindeki durak olcumunu da kimlikle getirir.</summary>
+    /// <summary>Belirli kaynagin pasif ya da gecmis durak olcumunu getirir.</summary>
+    /// <param name="realtimeSourceId">Okunacak satirin ait oldugu kaynak kimligi.</param>
     /// <param name="id">Durak olcumu kimligi.</param>
     /// <param name="cancellationToken">Istek iptal belirteci.</param>
     /// <remarks>
     /// Response { RealtimeStopTimeDto → kaynak/lookup adlari, sefer ve durak bilgisi, olcumler, kanit kimlikleri }
-    /// Aktiflik filtresi kapatilir; tenant ve organizasyon siniri kalir. Bu endpoint kayit yazmaz.
+    /// Kaynak istegin tenant ve organizasyonunda olmali; satir baska kaynaga aitse bulunamadi doner. Aktiflik filtresi
+    /// kapatilir. Bu endpoint kayit yazmaz.
     /// </remarks>
-    [HttpGet(RealtimeStopTimeRoutes.IncludingInactive)]
+    [HttpGet(RealtimeStopTimeRoutes.ForSource)]
     [Authorize(GtfsRealtimeManagementPermissions.RealtimeStopTimes.Manage)]
-    public virtual async Task<Result<RealtimeStopTimeDto>> GetIncludingInactiveAsync(
-        Guid id, CancellationToken cancellationToken = default)
-        => await AppService.GetIncludingInactiveAsync(id, cancellationToken);
+    public virtual async Task<Result<RealtimeStopTimeDto>> GetForSourceAsync(
+        Guid realtimeSourceId, Guid id, CancellationToken cancellationToken = default)
+        => await AppService.GetForSourceAsync(realtimeSourceId, id, cancellationToken);
 
     /// <summary>Aktif kaynagin durak olcumlerini filtreli ve sayfali getirir.</summary>
     /// <param name="input">Filtre, siralama ve sayfalama bilgileri.</param>
     /// <param name="cancellationToken">Istek iptal belirteci.</param>
     /// <remarks>
     /// Request { Page (int) → sayfa; PageSize (int) → boyut; Sorting (DataTableSorting[]?) → siralama;
-    /// Filters (RealtimeStopTimeFilter?) → ServiceDate, GtfsTripId, GtfsRouteId, VehicleId,
+    /// Filters (RealtimeStopTimeFilter?) → RealtimeSourceId, ServiceDate, GtfsTripId, GtfsRouteId, VehicleId,
     /// ViolationTypeId alan filtreleri }
     /// Response { TotalCount (long) → filtreye uyan sayi; Items (RealtimeStopTimeDto[]) → sayfa }
     /// Yalnizca aktif kaynak gorulur; eslesme yoksa liste bostur. Bu endpoint kayit yazmaz.
@@ -86,21 +88,24 @@ public class RealtimeStopTimeController : GtfsRealtimeManagementController
         [FromQuery] DataTableListInput<RealtimeStopTimeFilter> input, CancellationToken cancellationToken = default)
         => await AppService.GetFilteredListAsync(input, cancellationToken);
 
-    /// <summary>Pasif kaynak gecmisi dahil durak olcumlerini filtreli getirir.</summary>
+    /// <summary>Belirli kaynagin pasif ya da gecmis durak olcumlerini filtreli ve sayfali getirir.</summary>
+    /// <param name="realtimeSourceId">Listelenecek kaynak kimligi.</param>
     /// <param name="input">Filtre, siralama ve sayfalama bilgileri.</param>
     /// <param name="cancellationToken">Istek iptal belirteci.</param>
     /// <remarks>
     /// Request { Page (int) → sayfa; PageSize (int) → boyut; Sorting (DataTableSorting[]?) → siralama;
     /// Filters (RealtimeStopTimeFilter?) → ServiceDate, GtfsTripId, GtfsRouteId, VehicleId,
-    /// ViolationTypeId alan filtreleri }
+    /// ViolationTypeId alan filtreleri; RealtimeSourceId sunucuda rotadaki kaynaga kilitlenir }
     /// Response { TotalCount (long) → filtreye uyan sayi; Items (RealtimeStopTimeDto[]) → sayfa }
-    /// Aktiflik filtresi kapatilir; tenant ve organizasyon siniri kalir. Eslesme yoksa liste bostur; kayit yazilmaz.
+    /// Kaynak istegin tenant ve organizasyonunda olmali; aktiflik filtresi kapatilir. Eslesme yoksa liste bostur;
+    /// kayit yazilmaz.
     /// </remarks>
-    [HttpGet(RealtimeStopTimeRoutes.FilteredListIncludingInactive)]
+    [HttpGet(RealtimeStopTimeRoutes.ListForSource)]
     [Authorize(GtfsRealtimeManagementPermissions.RealtimeStopTimes.Manage)]
-    public virtual async Task<Result<PagedResultDto<RealtimeStopTimeDto>>> GetFilteredListIncludingInactiveAsync(
-        [FromQuery] DataTableListInput<RealtimeStopTimeFilter> input, CancellationToken cancellationToken = default)
-        => await AppService.GetFilteredListIncludingInactiveAsync(input, cancellationToken);
+    public virtual async Task<Result<PagedResultDto<RealtimeStopTimeDto>>> GetFilteredListForSourceAsync(
+        Guid realtimeSourceId, [FromQuery] DataTableListInput<RealtimeStopTimeFilter> input,
+        CancellationToken cancellationToken = default)
+        => await AppService.GetFilteredListForSourceAsync(realtimeSourceId, input, cancellationToken);
 
     /// <summary>Aktif kaynaktaki durak olcumunu gunceller.</summary>
     /// <param name="id">Guncellenecek durak olcumu kimligi.</param>

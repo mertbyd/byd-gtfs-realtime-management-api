@@ -11,7 +11,9 @@ using Byd.GtfsRealtimeManagement.ExceptionCodes;
 using Byd.GtfsRealtimeManagement.Interfaces;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeSources;
+using Byd.GtfsRealtimeManagement.Managers.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeSources;
 using Byd.GtfsRealtimeManagement.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Settings;
@@ -44,6 +46,8 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
     private IDataFilter DataFilter => LazyServiceProvider.LazyGetRequiredService<IDataFilter>();
 
     private IRealtimeFeedReader FeedReader => LazyServiceProvider.LazyGetRequiredService<IRealtimeFeedReader>();
+
+    private RealtimeSnapshotManager SnapshotManager => LazyServiceProvider.LazyGetRequiredService<RealtimeSnapshotManager>();
 
     // Istegin tenant ve organizasyonunda yeni kaynak kurar.
     public virtual async Task<RealtimeSource> CreateAsync(
@@ -100,6 +104,23 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
             source.OrganizationId == CurrentOrganization.Id && source.IsActive,
             cancellationToken: cancellationToken)
             ?? throw new BusinessException(RealtimeSourceExceptionCodes.ActiveSourceRequired);
+    }
+
+    // Kaynagin adresi tanimli her akisini bir kez okur (okuyucu GTFS-RT bicimini ve surumunu dogrular) ve akistaki sefer ve
+    // uyari kimliklerinin organizasyonun aktif GTFS planinda karsiligi oldugunu dogrular. Plana atif yapmayan bos akis kabul
+    // edilir; atif yapip hicbiri eslesmeyen akis baska bir veri setine aittir.
+    public virtual async Task EnsureMatchesPlanAsync(RealtimeSource source, CancellationToken cancellationToken = default)
+    {
+        var plan = (await SnapshotManager.EnsureLoadedAsync(cancellationToken)).Plan
+                   ?? throw new BusinessException(RealtimeSourceExceptionCodes.GtfsFeedRequired);
+        foreach (var feed in Feeds.Where(feed => feed.Url(source) is not null))
+        {
+            var message = await FeedReader.ReadAsync(source.Name, feed.Url(source)!, cancellationToken);
+            var matches = message.Entity.SelectMany(entity => MatchPlan(entity, plan)).ToList();
+            if (matches.Count > 0 && !matches.Contains(true))
+                throw new BusinessException(RealtimeSourceExceptionCodes.FeedPlanMismatch)
+                    .WithData("FeedType", feed.FeedType.ToString());
+        }
     }
 
     // Organizasyonun onceki aktif kaynagini pasife alip secilen kaynagi aktif yapar.
@@ -164,6 +185,15 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
         var message = await FeedReader.ReadAsync(source.Name, GetFeedUrl(source, feedType), cancellationToken);
         return message.Entity.Select(select).OfType<TMessage>().ToList();
     }
+
+    // Varligin plana her atfi icin planda karsiligi olup olmadigi: arac konumu ve sefer guncellemesinin seferi, uyarinin
+    // kapsam secicileri.
+    private IEnumerable<bool> MatchPlan(FeedEntityModel entity, RealtimePlanSnapshotModel plan)
+        => entity.Alert is { } alert
+            ? alert.InformedEntity.Select(selector => SnapshotManager.IsInPlan(plan, selector))
+            : (entity.Vehicle?.Trip ?? entity.TripUpdate?.Trip)?.TripId is { } tripId
+                ? [plan.Trips.ContainsKey(tripId)]
+                : [];
 
     // Birlesik baslik: en yeni standart surum ve en eski parcanin zamani; icerik ancak o an kadar gunceldir.
     private static FeedMessageModel Merge(List<FeedMessageModel> messages) => new()

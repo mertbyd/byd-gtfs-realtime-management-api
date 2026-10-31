@@ -9,6 +9,11 @@ public static class TripScheduleRelationshipConsts
     public const string TableName = "TripScheduleRelationships";
     public const string CodeIndex = "IX_TripScheduleRelationships_Code";
 
+    // GTFS-RT TripDescriptor.ScheduleRelationship kodlari.
+    public const int ScheduledCode = 0;
+    public const int CanceledCode = 3;
+    public const int DeletedCode = 7;
+
     public static readonly IReadOnlyList<(int Id, string Name, int Code)> Definitions =
     [
         (1, "Planlı", 0),

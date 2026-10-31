@@ -3,11 +3,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Byd.CoreExtensions.ExceptionCodes;
 using Byd.CoreExtensions.Managers;
+using Byd.CoreExtensions.Querying;
 using Byd.GtfsRealtimeManagement.Entities.Lookups;
 using Byd.GtfsRealtimeManagement.Entities.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Interfaces;
 using Byd.GtfsRealtimeManagement.Interfaces.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Managers.RealtimeSources;
+using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStopTimes;
 using Volo.Abp;
 using Volo.Abp.Data;
@@ -57,13 +59,81 @@ public class RealtimeStopTimeManager(
             ?? throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
     }
 
-    // Pasif kaynak gecmisini de tenant ve organizasyon kapsaminda okur.
-    public virtual async Task<RealtimeStopTime> EnsureExistsIncludingInactiveInScopeAsync(
-        Guid id, CancellationToken cancellationToken = default)
+    // Belirli kaynagin pasif ya da gecmis satirini getirir; kaynak istegin kapsaminda olmali.
+    public virtual async Task<RealtimeStopTime> EnsureExistsForSourceAsync(
+        Guid realtimeSourceId, Guid id, CancellationToken cancellationToken = default)
     {
         using var inactiveIncluded = DataFilter.Disable<ActiveRealtimeSourceFilter>();
-        return await repository.FindWithLookupsAsync(id, cancellationToken)
-            ?? throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
+        await sourceManager.EnsureExistsInScopeAsync(realtimeSourceId, cancellationToken);
+        var entity = await repository.FindWithLookupsAsync(id, cancellationToken);
+        return entity is not null && entity.RealtimeSourceId == realtimeSourceId
+            ? entity
+            : throw new BusinessException(GeneralExceptionCodes.EntityNotFound);
+    }
+
+    // Liste filtresindeki kaynak alanini, istegin kapsaminda dogrulanan kaynaga kilitler.
+    public virtual async Task ScopeFilterAsync(
+        IRealtimeSourceFilter filter, Guid realtimeSourceId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        using var inactiveIncluded = DataFilter.Disable<ActiveRealtimeSourceFilter>();
+        await sourceManager.EnsureExistsInScopeAsync(realtimeSourceId, cancellationToken);
+        filter.RealtimeSourceId = new DataTableFilterItem
+        {
+            Operator = DataTableFilterOperator.Equal,
+            Value = realtimeSourceId.ToString()
+        };
+    }
+
+    // Isleme adiminin ilk kez gordugu sefer orneginin duragi icin satir kurar; durum kimlikleri lookup tablosundan gelir.
+    public virtual RealtimeStopTime CreateProcessed(Guid realtimeSourceId, Guid gtfsFeedId,
+        RealtimeTripInstanceModel instance, RealtimeStopTimeSnapshotModel stop,
+        int tripScheduleRelationshipId, int stopScheduleRelationshipId)
+        => new(GuidGenerator.Create(), realtimeSourceId)
+        {
+            GtfsFeedId = gtfsFeedId,
+            ServiceDate = instance.ServiceDate,
+            StartTime = instance.StartTime,
+            GtfsTripId = instance.Trip.GtfsTripId,
+            GtfsRouteId = instance.Trip.GtfsRouteId,
+            StopSequence = stop.StopSequence,
+            GtfsStopId = stop.GtfsStopId ?? string.Empty,
+            TripScheduleRelationshipId = tripScheduleRelationshipId,
+            StopScheduleRelationshipId = stopScheduleRelationshipId
+        };
+
+    // Aracin duraga girisini, konumunu ve akisin bildirdigi durak durumunu kanit correlation'iyla yazar.
+    public virtual void ApplyArrival(RealtimeStopTime entity, DateTime arrivalTime, double latitude, double longitude,
+        Guid? vehicleId, int? vehicleStopStatusId, string correlationId)
+    {
+        entity.ArrivalTime = arrivalTime;
+        entity.Latitude = latitude;
+        entity.Longitude = longitude;
+        entity.VehicleId = vehicleId ?? entity.VehicleId;
+        entity.VehicleStopStatusId = vehicleStopStatusId;
+        entity.ArrivalCorrelationId = correlationId;
+    }
+
+    // Aracin duraktan cikisini ya da duragi gectigini yazar; durmadan gecilen durakta cikis zamani bos kalir. Kaynagin
+    // arac ayrilmadan once bildirdigi son gecikme de bu anda yazilir.
+    public virtual void ApplyDeparture(RealtimeStopTime entity, DateTime? departureTime, Guid? vehicleId,
+        int? reportedDelay, int? violationTypeId, string correlationId)
+    {
+        entity.DepartureTime = departureTime;
+        entity.VehicleId = vehicleId ?? entity.VehicleId;
+        entity.ReportedDelay = reportedDelay ?? entity.ReportedDelay;
+        entity.ViolationTypeId = violationTypeId ?? entity.ViolationTypeId;
+        entity.DepartureCorrelationId = correlationId;
+    }
+
+    // Sefer ve durak planlama durumunu kanit correlation'iyla yazar.
+    public virtual void ApplyStatus(RealtimeStopTime entity, int tripScheduleRelationshipId,
+        int stopScheduleRelationshipId, int? violationTypeId, string correlationId)
+    {
+        entity.TripScheduleRelationshipId = tripScheduleRelationshipId;
+        entity.StopScheduleRelationshipId = stopScheduleRelationshipId;
+        entity.ViolationTypeId = violationTypeId ?? entity.ViolationTypeId;
+        entity.StatusCorrelationId = correlationId;
     }
 
     // Girdi alanlarini uygular ve sefer ornegi/durak sirasini tekillestirir.

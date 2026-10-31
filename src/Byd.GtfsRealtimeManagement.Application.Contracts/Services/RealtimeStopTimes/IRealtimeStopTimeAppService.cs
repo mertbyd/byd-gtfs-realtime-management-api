@@ -14,11 +14,13 @@ public interface IRealtimeStopTimeAppService : IApplicationService
 {
     Task<RealtimeStopTimeDto> CreateAsync(CreateRealtimeStopTimeDto input, CancellationToken cancellationToken = default);
     Task<RealtimeStopTimeDto> GetAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<RealtimeStopTimeDto> GetIncludingInactiveAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<RealtimeStopTimeDto> GetForSourceAsync(
+        Guid realtimeSourceId, Guid id, CancellationToken cancellationToken = default);
     Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListAsync(
         DataTableListInput<RealtimeStopTimeFilter> input, CancellationToken cancellationToken = default);
-    Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListIncludingInactiveAsync(
-        DataTableListInput<RealtimeStopTimeFilter> input, CancellationToken cancellationToken = default);
+    Task<PagedResultDto<RealtimeStopTimeDto>> GetFilteredListForSourceAsync(
+        Guid realtimeSourceId, DataTableListInput<RealtimeStopTimeFilter> input,
+        CancellationToken cancellationToken = default);
     Task<RealtimeStopTimeDto> UpdateAsync(
         Guid id, UpdateRealtimeStopTimeDto input, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);

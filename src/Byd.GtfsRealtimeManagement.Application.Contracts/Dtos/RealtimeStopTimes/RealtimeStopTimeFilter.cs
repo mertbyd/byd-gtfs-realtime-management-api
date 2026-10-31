@@ -1,13 +1,17 @@
 using Byd.CoreExtensions.Attributes;
 using Byd.CoreExtensions.Querying;
 using Byd.GtfsRealtimeManagement.Consts;
+using Byd.GtfsRealtimeManagement.Interfaces;
 
 namespace Byd.GtfsRealtimeManagement.Dtos.RealtimeStopTimes;
 
 // islevi: Durak olcumu listesinin filtrelenebilir alanlarini tasir.
 // sistemdeki gorevi: Core DataTable sorgusunu tipli alanlarla sinirlar.
-public sealed class RealtimeStopTimeFilter
+public sealed class RealtimeStopTimeFilter : IRealtimeSourceFilter
 {
+    [DataTable(RealtimeStopTimeFilterFields.RealtimeSourceId, RealtimeStopTimeFilterFields.PropertyPaths.RealtimeSourceId)]
+    public DataTableFilterItem? RealtimeSourceId { get; set; }
+
     [DataTable(RealtimeStopTimeFilterFields.ServiceDate, RealtimeStopTimeFilterFields.PropertyPaths.ServiceDate)]
     public DataTableFilterItem? ServiceDate { get; set; }
 

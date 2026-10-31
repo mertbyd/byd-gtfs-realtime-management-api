@@ -22,6 +22,8 @@
     "GtfsRealtimeManagement:020004": "Realtime feed URL must be an absolute HTTP or HTTPS URL.",
     "GtfsRealtimeManagement:020005": "The source has no URL for this realtime feed.",
     "GtfsRealtimeManagement:020006": "An active realtime source is required for this organization.",
+    "GtfsRealtimeManagement:020007": "An active static GTFS feed is required before a realtime source can be activated.",
+    "GtfsRealtimeManagement:020008": "The {FeedType} feed does not reference any trip, route or stop of the active GTFS feed; it belongs to another dataset.",
     "GtfsRealtimeManagement:030001": "Realtime feed response could not be decoded as GTFS-RT protobuf.",
     "GtfsRealtimeManagement:030002": "Realtime feed version or incrementality is not supported.",
     "GtfsRealtimeManagement:040001": "A static GTFS feed is required.",
