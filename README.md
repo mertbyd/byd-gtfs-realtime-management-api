@@ -1,286 +1,143 @@
 # Byd.GtfsRealtimeManagement
 
-[![NuGet](https://img.shields.io/nuget/v/Byd.GtfsRealtimeManagement.Domain?label=Byd.GtfsRealtimeManagement)](https://www.nuget.org/packages/Byd.GtfsRealtimeManagement.Domain)
-![ABP](https://img.shields.io/badge/ABP-10.3-blue)
-![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)
-![GTFS-RT](https://img.shields.io/badge/GTFS-Realtime-0B8F50)
-
-Canlı toplu taşıma verisinin modülü. Bir organizasyonun GTFS-RT akışlarını (araç konumları, sefer güncellemeleri, servis
+Canlı toplu taşıma verisinin modülü. Bir organization'ın GTFS-RT feed'lerini (araç konumları, sefer güncellemeleri, servis
 uyarıları) düzenli aralıklarla çeker, aktif tarifeyle karşılaştırır, her durağa varış ve kalkışı ölçer, erken ya da geç
-kalkışları işaretler ve sonucu bağlı ekranlara canlı olarak akıtır.
-
-## İçindekiler
-
-- [Platformdaki yeri](#platformdaki-yeri)
-- [Bir bakışta](#bir-bakışta)
-- [Veri akışı](#veri-akışı)
-- [Özellikler](#özellikler)
-- [HTTP uçları](#http-uçları)
-- [Olaylar ve işçiler](#olaylar-ve-işçiler)
-- [Veritabanı](#veritabanı)
-- [Yetkiler](#yetkiler)
-- [Ayarlar](#ayarlar)
-- [Hata kodları](#hata-kodları)
-- [Bir modülde kullanmak](#bir-modülde-kullanmak)
-- [Geliştirme](#geliştirme)
-
-## Platformdaki yeri
+kalkışları işaretler ve sonucu bağlı ekranlara canlı olarak iter.
 
 ```mermaid
 flowchart LR
-    AUTH[Byd.AuthManagement<br/>log, file, core ile] --> RT[Byd.GtfsRealtimeManagement<br/><b>bu repo</b>]
-    GTFS[Byd.GtfsManagement] -- "FeedChangedEto<br/>plan değişti" --> RT
-    VEH[Byd.VehicleManagement] -- "VehicleEto<br/>araç değişti" --> RT
-    RT -- "VehicleRegistrationRequestedEto<br/>kayıtsız araç" --> VEH
-    RT -- "canlı akış" --> LOG[Log modülü hub'ı]
+    AUTH[AuthManagement<br/>log, file, core ile] --> RT[GtfsRealtimeManagement]
+    GTFS[GtfsManagement] -- "tarife değişti" --> RT
+    VEH[VehicleManagement] -- "araç değişti" --> RT
+    RT -- "kayıtsız araç" --> VEH
+    RT -- "canlı stream" --> LOG[Log modülü hub'ı]
     style RT fill:#6a48f5,color:#fff,stroke:#4a2fd0
 ```
 
-## Bir bakışta
+## Capabilities
 
-| | |
+| Capability | Ne sağlar |
 |---|---|
-| Paket ailesi | `Byd.GtfsRealtimeManagement.*` |
-| Sürüm | `0.1.0` (`common.props`) |
-| Bağımlılık | Auth ve log paketleri (file ve core onlarla gelir), `SystemStandards.Core` |
-| Kaynak biçimi | GTFS-RT protobuf, HTTP(S) ile çekilir |
-| Canlı iletim | Log modülünün SignalR hub'ı (`streamReceived`) |
-| Kapsam | Organizasyon; organizasyonun tek aktif kaynağı olur |
+| [Realtime source](#realtime-source) | Organization'ın GTFS-RT adreslerini tanımlama, tek aktif source |
+| [Periyodik fetch](#periyodik-fetch) | Feed'leri organization'a özel aralıklarla çekme |
+| [Varış ve kalkış ölçümü](#varış-ve-kalkış-ölçümü) | Araç konumundan durak bazında gerçek varış ve kalkış saati |
+| [Violation tespiti](#violation-tespiti) | Erken ve geç kalkış, durak atlama, iptal edilen sefer |
+| [Canlı stream](#canlı-stream) | İşlenmiş listeyi bağlı ekranlara anlık itme |
+| [Kayıtsız araç kaydı](#kayıtsız-araç-kaydı) | Akışta görülen yeni aracı vehicle modülüne kaydettirme |
+| [Anlık görünüm](#anlık-görünüm) | Aktif source'un feed'lerini istek anında DTO ya da GTFS-RT olarak okuma |
+| [Ölçüm kanıtı](#ölçüm-kanıtı) | Her ölçümün hangi ham feed'den geldiği |
+| [Organization setting'leri](#organization-settingleri) | Aralık, yarıçap ve toleransları organization bazında ayarlama |
 
-## Veri akışı
-
-Modül iki katmanlı veri tutar. Ham akış her çekmede log modülünün dış servis kaydına yazılır (kanıt). İşlenmiş sonuç,
-yani durak bazında ölçülen varış ve kalkışlar, bu modülün tablolarına yazılır ve kaydın hangi ham çekmeden geldiği
-correlation kimliğiyle bağlanır.
+## Nasıl çalışır
 
 ```mermaid
 sequenceDiagram
-    participant W as RealtimeFeedFetchWorker
-    participant SRC as GTFS-RT kaynağı
+    participant W as Fetch worker
+    participant SRC as GTFS-RT source
     participant LOG as Log modülü
     participant P as İşleme
-    participant S as Organizasyon kopyası<br/>(araçlar + aktif plan)
-    participant DB as RealtimeStopTimes
-    participant HUB as Canlı akış
-    W->>SRC: Protobuf çek (aralık ayarından)
+    participant DB as Ölçüm tablosu
+    participant HUB as Canlı stream
+    W->>SRC: Protobuf çek
     SRC-->>W: FeedMessage
-    W->>LOG: Ham yanıt dış servis kaydına (correlation id)
-    W->>P: Araç konumları / sefer güncellemeleri / uyarılar
-    P->>S: Planı ve araçları bellekteki kopyadan oku
-    P->>DB: Varış, kalkış, gecikme, ihlal (kanıt correlation id ile)
-    P->>HUB: İşlenmiş liste organizasyona canlı gider
+    W->>LOG: Ham response external service log'a (correlation id)
+    W->>P: Araç konumları, sefer güncellemeleri, uyarılar
+    P->>P: Memory'deki tarife ve araç listesiyle karşılaştır
+    P->>DB: Varış, kalkış, gecikme, violation
+    P->>HUB: İşlenmiş liste organization'a
 ```
 
-## Özellikler
+Organization'ın araçları ve aktif tarifesi bir kez yüklenip memory'de tutulur, her mesajda database'e gidilmez. Bu kopya
+event'lerle güncellenir: GTFS'te tarife değişince tarife, vehicle'da araç değişince araç yeniden yüklenir.
 
-### 1. Realtime kaynakları
+## Realtime source
 
-Kaynak bir organizasyonun GTFS-RT adresleridir: araç konumları, sefer güncellemeleri ve servis uyarıları için ayrı ayrı
-adresler (en az biri dolu, mutlak HTTP(S)). Organizasyonun bir anda tek aktif kaynağı olur; `activate` öncekini pasife
-alır. Kaynak uçları akış çekmez, yalnız tanımı yönetir.
+Source bir organization'ın GTFS-RT adresleridir: araç konumları, sefer güncellemeleri ve servis uyarıları için ayrı
+adresler (en az biri dolu). Organization'ın aynı anda tek aktif source'u olur; `activate` öncekini pasife alır.
 
-### 2. Periyodik çekme
+## Periyodik fetch
 
-`RealtimeFeedFetchWorker` her aktif kaynağın her akışını organizasyonun ayarındaki aralıkla çeker. Aynı akış aralık
-dolmadan yeniden çekilmez; çekme hata verse de aralık beklenir. Çağrılar log modülüne dış servis kaydı olarak yazılır.
+Worker her aktif source'un her feed'ini organization'ın setting'indeki aralıkla çeker. Aralık dolmadan aynı feed tekrar
+çekilmez; fetch hata verse de aralık beklenir.
 
-| Akış | Varsayılan aralık |
+| Feed | Default aralık |
 |---|---|
 | Araç konumları | 10 sn |
 | Sefer güncellemeleri | 10 sn |
 | Servis uyarıları | 60 sn |
 
-### 3. Varış ve kalkış ölçümü
+## Varış ve kalkış ölçümü
 
-Araç konumu aktif plandaki durakla karşılaştırılır. Araç durağın yarıçapı içinde ve durma hızının altındaysa durağa varmış
-sayılır; yarıçaptan çıkınca kalkmış sayılır. Ölçülen saat plandaki saatle karşılaştırılır.
-
-| Kod | İhlal | Ne zaman |
-|---|---|---|
-| 1 | Yapılmayan sefer | Lookup'ta tanımlı; işleme adımı 2–5 arasındaki kodları yazar |
-| 2 | İptal edilen sefer | Akış seferi iptal ya da silinmiş bildirdi |
-| 3 | Durak atlama | Sefer durağa uğramadan geçti |
-| 4 | Erken kalkış | Plandan tolerans süresinden (varsayılan 60 sn) daha erken |
-| 5 | Geç kalkış | Plandan tolerans süresinden (varsayılan 300 sn) daha geç |
-
-Bayat akış (varsayılan 120 sn'den eski) işlenmez. Seferin o gün çalışıp çalışmadığı GTFS takvim kuralıyla belirlenir:
-günün `calendar_dates` istisnası haftalık takvimin önüne geçer.
-
-### 4. Bellekte organizasyon kopyası
-
-Her akışta veritabanına gitmemek için organizasyonun araçları ve aktif GTFS planı bir kez yüklenir ve bellekte tutulur.
-Kopya periyodik sorguyla değil, olaylarla güncellenir:
-
-| Olay | Kopyaya etkisi |
-|---|---|
-| GTFS modülünden plan değişikliği | Aktif plan yeniden yüklenir |
-| Araç modülünden araç eklendi/güncellendi | Araç kimliği kopyaya yazılır |
-| Araç silindi | Araç kopyadan çıkar; akışta yeniden görülürse yeniden kayıt istenir |
-
-### 5. Kayıtsız aracı kaydettirme
-
-Akışta görülen ama kopyada olmayan her araç için bir kez `VehicleRegistrationRequestedEto` yayınlanır; araç modülü aracı
-"Realtime" kaynaklı olarak kaydeder ve araç olayıyla kopyaya geri döner.
-
-### 6. Canlı akış
-
-İşlenen liste log modülünün `StreamAsync` yoluyla organizasyonun bağlı ekranlarına gider (hub mesajı `streamReceived`,
-ad akış türü). Boş tam liste de gönderilir ki istemci elindekini temizlesin; değişiklik yokken boş kısmi liste gitmez.
-Canlı araç takibi için ayrıca bir sorgu ucu açılmaz; ekranlar akışı dinler.
-
-### 7. Anlık görünüm uçları
-
-Aktif kaynağın akışları istek anında da okunabilir: araç konumları, sefer güncellemeleri ve uyarılar GTFS-RT alanlarıyla
-DTO olarak; `feed-message` ise bütün akışları tek bir GTFS-RT `FeedMessage` olarak döner.
-
-### 8. Ölçüm kayıtları
-
-Her durak ölçümü `RealtimeStopTimes` tablosunda durur: servis günü, sefer, hat, durak sırası, varış ve kalkış zamanı,
-konum, bildirilen gecikme, durum ve ihlal türü. Satır, varış, kalkış ve durum bilgisinin geldiği ham çekmelerin correlation
-kimliklerini taşır; böylece her ölçüm log modülündeki ham yanıta kadar izlenir.
-
-## HTTP uçları
-
-**`api/gtfs-realtime-management/realtime-sources`**
-
-| Yöntem | Yol | Ne yapar |
-|---|---|---|
-| `POST` | `/` | Kaynak ekler |
-| `GET` | `{id}` | Kaynak |
-| `GET` | `{id}/including-inactive` | Pasif kaynak dahil |
-| `GET` | `filtered-list` | Filtreli liste |
-| `PUT` | `{id}` | Ad ve adresleri günceller |
-| `POST` | `{id}/activate` | Aktif kaynak yapar |
-| `DELETE` | `{id}` | Siler |
-| `GET` | `vehicle-positions` | Aktif kaynağın araç konumları |
-| `GET` | `trip-updates` | Aktif kaynağın sefer güncellemeleri |
-| `GET` | `service-alerts` | Aktif kaynağın uyarıları |
-| `GET` | `feed-message` | Bütün akışlar tek GTFS-RT mesajı olarak |
-
-**`api/gtfs-realtime-management/realtime-stop-times`**
-
-| Yöntem | Yol | Ne yapar |
-|---|---|---|
-| `POST` | `/` | Ölçüm ekler |
-| `GET` | `{id}` | Ölçüm (aktif kaynak) |
-| `GET` | `filtered-list` | Filtreli liste: kaynak, servis günü, sefer, hat, araç, ihlal türü |
-| `GET` | `realtime-sources/{realtimeSourceId}/{id}` | Belirli kaynaktaki ölçüm |
-| `GET` | `realtime-sources/{realtimeSourceId}/filtered-list` | Belirli kaynağın ölçümleri |
-| `PUT` | `{id}` | Günceller |
-| `DELETE` | `{id}` | Siler |
-
-**`api/gtfs-realtime-management/lookups`**: `trip-schedule-relationships`, `stop-schedule-relationships`,
-`vehicle-stop-statuses`, `violation-types`; her biri ekleme, okuma, liste, güncelleme, silme.
-
-## Olaylar ve işçiler
-
-| Olay / işçi | Yön | Ne yapar |
-|---|---|---|
-| `RealtimeFeedFetchWorker` | Periyodik işçi | Aktif kaynakların akışlarını çeker, işler, yazar, akıtır |
-| `GtfsFeedChangedEto` | Dinler (GTFS modülü) | Organizasyonun plan kopyasını yeniden yükler |
-| `VehicleEto` | Dinler (araç modülü) | Araç kopyasını günceller |
-| `VehicleRegistrationRequestedEto` | Yayınlar | Kayıtsız aracı araç modülüne kaydettirir |
-| `RealtimeSourceActivationRequestedEto` | Yerel | Aktif kaynağı aynı işlem içinde değiştirir |
-
-## Veritabanı
+Araç konumu aktif tarifedeki durakla karşılaştırılır. Araç durağın yarıçapı içinde ve durma hızının altındaysa varmış,
+yarıçaptan çıkınca kalkmış sayılır. Ölçülen saat tarifedeki saatle karşılaştırılır.
 
 ```mermaid
-erDiagram
-    RealtimeSources ||--o{ RealtimeStopTimes : "RealtimeSourceId"
-    TripScheduleRelationships ||--o{ RealtimeStopTimes : ""
-    StopScheduleRelationships ||--o{ RealtimeStopTimes : ""
-    VehicleStopStatuses ||--o{ RealtimeStopTimes : ""
-    ViolationTypes ||--o{ RealtimeStopTimes : ""
-    RealtimeSources {
-        guid Id PK
-        guid OrganizationId
-        string Name
-        string VehiclePositionsUrl
-        string TripUpdatesUrl
-        string ServiceAlertsUrl
-        bool IsActive
-    }
-    RealtimeStopTimes {
-        guid Id PK
-        guid RealtimeSourceId FK
-        guid GtfsFeedId
-        guid VehicleId
-        date ServiceDate
-        string GtfsTripId
-        string GtfsRouteId
-        string GtfsStopId
-        int StopSequence
-        datetime ArrivalTime
-        datetime DepartureTime
-        int ReportedDelay
-        string ArrivalCorrelationId
-        string DepartureCorrelationId
-    }
+flowchart LR
+    A[Araç konumu] --> R{Durak yarıçapında<br/>ve yavaş mı?}
+    R -- Evet --> V[Varış saati yazılır]
+    V --> O{Yarıçaptan çıktı mı?}
+    O -- Evet --> K[Kalkış saati yazılır]
+    K --> C{Tarifeyle fark<br/>toleransı aşıyor mu?}
+    C -- Erken --> E[Erken kalkış]
+    C -- Geç --> G[Geç kalkış]
 ```
 
-| Tablo | Ne tutar |
+Bayat feed (default 120 sn'den eski) işlenmez. Seferin o gün çalışıp çalışmadığı GTFS takvim kuralıyla belirlenir.
+
+## Violation tespiti
+
+| Violation | Ne zaman |
 |---|---|
-| `RealtimeSources` | Organizasyonun GTFS-RT adresleri |
-| `RealtimeStopTimes` | Durak bazında ölçülen varış, kalkış, gecikme ve ihlaller |
-| `TripScheduleRelationships`, `StopScheduleRelationships` | GTFS-RT `schedule_relationship` değerleri (lookup) |
-| `VehicleStopStatuses` | GTFS-RT `current_status` değerleri (lookup) |
-| `ViolationTypes` | Yapılmayan sefer, iptal, durak atlama, erken ve geç kalkış (lookup) |
+| İptal edilen sefer | Feed seferi iptal ya da silinmiş bildirdi |
+| Durak atlama | Sefer durağa uğramadan geçti |
+| Erken kalkış | Tarifeden toleranstan (default 60 sn) daha erken |
+| Geç kalkış | Tarifeden toleranstan (default 300 sn) daha geç |
 
-Ham akış tabloya girmez; log modülünün dış servis kaydında durur. Plan ve araç verisi kopyalanmaz, kimlikle bağlanır.
+Violation'lar ölçüm satırında tutulur; hat, sefer, araç ve violation türüne göre filtrelenerek raporlanır.
 
-## Yetkiler
+## Canlı stream
 
-| İzin | Ne verir |
+İşlenmiş liste log modülünün stream'i üzerinden organization'ın bağlı ekranlarına gider (`streamReceived`). Canlı araç
+takibi için ayrıca bir query endpoint'i açılmaz; ekranlar stream'i dinler. Boş tam liste de gönderilir ki client elindekini
+temizlesin.
+
+## Kayıtsız araç kaydı
+
+Akışta görülen ama kayıtlı olmayan her araç için bir kez `VehicleRegistrationRequestedEto` yayınlanır. Vehicle modülü
+aracı "Realtime" kaynaklı olarak kaydeder ve araç event'iyle memory'deki listeye geri döner.
+
+## Anlık görünüm
+
+Aktif source'un feed'leri istek anında da okunur: `vehicle-positions`, `trip-updates`, `service-alerts` GTFS-RT alanlarıyla
+DTO olarak; `feed-message` ise hepsini tek bir GTFS-RT `FeedMessage` olarak döner.
+
+## Ölçüm kanıtı
+
+Veri iki katmanda durur. Ham feed tabloya girmez, log modülünün external service log'unda durur. İşlenmiş ölçüm bu
+modülün tablosundadır ve hangi ham fetch'ten geldiğini correlation id ile taşır; her ölçüm ham response'a kadar izlenir.
+Tarife ve araç bilgisi kopyalanmaz, id ile bağlanır.
+
+## Organization setting'leri
+
+Bütün eşikler ABP setting'idir ve organization bazında değiştirilebilir.
+
+| Setting | Default |
 |---|---|
-| `GtfsRealtimeManagement.RealtimeSources.View` / `.Manage` | Kaynakları görmek / yönetmek |
-| `GtfsRealtimeManagement.RealtimeStopTimes.View` / `.Manage` | Ölçümleri görmek / düzeltmek |
-| `GtfsRealtimeManagement.Lookups.View` / `.Manage` | Lookup'lar |
+| Fetch aralıkları (araç konumu, sefer güncellemesi, uyarı) | 10 / 10 / 60 sn |
+| Durak yarıçapı | 50 m |
+| Durma hızı | 1.5 m/sn |
+| Bayat feed sınırı | 120 sn |
+| Erken / geç kalkış toleransı | 60 / 300 sn |
 
-## Ayarlar
+## Modülde kullanım
 
-Organizasyon bazında ezilebilen ABP ayarlarıdır.
-
-| Ayar | Varsayılan | Ne yapar |
-|---|---|---|
-| `GtfsRealtimeManagement.Fetch.VehiclePositionsIntervalSeconds` | 10 | Araç konumu çekme aralığı |
-| `GtfsRealtimeManagement.Fetch.TripUpdatesIntervalSeconds` | 10 | Sefer güncellemesi çekme aralığı |
-| `GtfsRealtimeManagement.Fetch.ServiceAlertsIntervalSeconds` | 60 | Uyarı çekme aralığı |
-| `GtfsRealtimeManagement.Processing.StopRadiusMeters` | 50 | Durağa varış yarıçapı (metre) |
-| `GtfsRealtimeManagement.Processing.StoppedSpeedMetersPerSecond` | 1.5 | Bu hızın altı "durdu" sayılır |
-| `GtfsRealtimeManagement.Processing.StaleFeedSeconds` | 120 | Bundan eski akış işlenmez |
-| `GtfsRealtimeManagement.Processing.EarlyDepartureToleranceSeconds` | 60 | Erken kalkış toleransı |
-| `GtfsRealtimeManagement.Processing.LateDepartureToleranceSeconds` | 300 | Geç kalkış toleransı |
-
-## Hata kodları
-
-| Aile | Kapsadığı durumlar |
+| Host ihtiyacı | Ne için |
 |---|---|
-| `RealtimeSourceExceptionCodes` | Kapsam yok, ad/adres eksik ya da geçersiz, aktif kaynak yok, aktif GTFS Feed yok, akış planla uyuşmuyor |
-| `RealtimeStopTimeExceptionCodes` | Feed, ilişki, servis günü, GTFS kimliği zorunlu; geçersiz sıra, koordinat, başlangıç saati |
-| `RealtimeFeedExceptionCodes` | Akış okunamadı, desteklenmeyen akış |
-| `RealtimeLookupExceptionCodes` | Ad zorunlu, kod geçersiz ya da tekrarlı |
+| RabbitMQ | GTFS ve vehicle modülleriyle event alışverişi |
+| Merkezi log host'u | Canlı stream ve external service log |
+| GTFS modülünde aktif feed | Ölçüm aktif tarifeye göre yapılır |
 
-Kodlar `GtfsRealtimeManagement:` önekiyle gelir.
-
-## Bir modülde kullanmak
-
-| Tüketen katman | Paket | Modül sınıfı |
-|---|---|---|
-| `<Modül>.Domain.Shared` | `Byd.GtfsRealtimeManagement.Domain.Shared` | `GtfsRealtimeManagementDomainSharedModule` |
-| `<Modül>.Domain` | `Byd.GtfsRealtimeManagement.Domain` | `GtfsRealtimeManagementDomainModule` |
-| `<Modül>.Application.Contracts` | `Byd.GtfsRealtimeManagement.Application.Contracts` | `GtfsRealtimeManagementApplicationContractsModule` |
-| `<Modül>.Application` | `Byd.GtfsRealtimeManagement.Application` | `GtfsRealtimeManagementApplicationModule` |
-| `<Modül>.EntityFrameworkCore` | `Byd.GtfsRealtimeManagement.EntityFrameworkCore` | `GtfsRealtimeManagementEntityFrameworkCoreModule` |
-| `<Modül>.HttpApi` | `Byd.GtfsRealtimeManagement.HttpApi` | `GtfsRealtimeManagementHttpApiModule` |
-
-**Host**
-
-| Gereken | Neden |
-|---|---|
-| Core, log ve auth host sözleşmesi | Zincirin bütün modülleri |
-| `RabbitMQ` bölümü | GTFS ve araç modülleriyle olay alışverişi |
-| Log modülü merkezi host'u | Canlı akış ve dış servis kayıtları |
-| GTFS modülünde aktif Feed | Ölçüm aktif plana göre yapılır |
+Permission'lar: `GtfsRealtimeManagement.RealtimeSources`, `.RealtimeStopTimes` ve `.Lookups` için `View` / `Manage`.
 
 ## Geliştirme
 
@@ -288,5 +145,3 @@ Kodlar `GtfsRealtimeManagement:` önekiyle gelir.
 dotnet build Byd.GtfsRealtimeManagement.slnx
 dotnet test Byd.GtfsRealtimeManagement.slnx
 ```
-
-Host `host/Byd.GtfsRealtimeManagement.HttpApi.Host` altındadır.
