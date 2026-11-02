@@ -3,13 +3,21 @@ using System.Collections.Generic;
 
 namespace Byd.GtfsRealtimeManagement.Consts;
 
-// islevi: GTFS-RT cekmesinin HTTP istemcisini, istek tipini, zaman asimini, yanit sinirini ve isci turunu tanimlar.
-// sistemdeki gorevi: Okuyucu, modul kaydi ve cekme iscisi ayni sabitleri kullanir.
+// islevi: GTFS-RT cekmesinin HTTP istemcisini, istek tipini, zaman asimini, yanit sinirini, isci turunu ve akis sagligi
+// bildiriminin dillerini tanimlar.
+// sistemdeki gorevi: Okuyucu, modul kaydi, cekme iscisi ve cekme adimi ayni sabitleri kullanir.
 public static class RealtimeFeedConsts
 {
     public const string HttpClientName = "RealtimeFeedReader";
     public const string RequestType = "GET";
     public static readonly IReadOnlyList<string> SupportedVersions = Array.AsReadOnly(new[] { "1.0", "2.0" });
+
+    // Kosullu istegin dogrulayicilari (ETag, Last-Modified) en fazla bu kadar saklanir; sonra istek kosulsuz gider.
+    public static readonly TimeSpan ValidatorLifetime = TimeSpan.FromHours(1);
+
+    // Akis sagligi bildiriminin metin dilleri; metin kaynak ve akis adidir, istemci basligi koduyla cevirir.
+    public const string TurkishLanguageCode = "tr";
+    public const string EnglishLanguageCode = "en";
 
     // Tek yanitin en buyuk boyutu; Vilnius yanitlari 50-110 KB.
     public const long MaxResponseBytes = 10L * 1024 * 1024;

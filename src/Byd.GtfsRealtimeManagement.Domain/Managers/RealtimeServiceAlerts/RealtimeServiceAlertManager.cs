@@ -10,6 +10,7 @@ using Byd.GtfsRealtimeManagement.Managers.RealtimeStreams;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
+using Byd.GtfsRealtimeManagement.RealtimeFeeds;
 using Volo.Abp.Domain.Services;
 
 namespace Byd.GtfsRealtimeManagement.Managers.RealtimeServiceAlerts;
@@ -17,27 +18,39 @@ namespace Byd.GtfsRealtimeManagement.Managers.RealtimeServiceAlerts;
 // islevi: Servis uyarilarini plan kopyasiyla dogrular; gosterim araliginda olan ve kapsaminda planda karsiligi bulunan
 // uyarilari istemciye gidecek bicime cevirir.
 // sistemdeki gorevi: Uyarilarin isleme adimidir. Uyari sayisi az ve her cekmede tam liste geldigi icin akis her seferinde
-// tam liste olarak gider; suresi dolan ya da akistan dusen uyari bir sonraki listede yer almaz. Gecersiz uyari sayisi
-// cekme basina log'a yazilir.
+// tam liste olarak gider; suresi dolan ya da akistan dusen uyari bir sonraki listede yer almaz. Ayni baslik zamanli yanit da
+// yeniden islenir, cunku suresi dolan uyari icerik degismeden listeden cikmalidir. Plana eslesmeyen uyari sayisi akisla
+// gider ve cekme basina log'a yazilir.
 public class RealtimeServiceAlertManager(
     RealtimeSnapshotManager snapshotManager,
     RealtimeStreamManager streamManager) : DomainService
 {
-    // Akistaki uyarilardan gosterilecekleri tam liste olarak dondurur; bayat akis ya da plan yoksa liste bos ve kismidir.
+    // Akistaki uyarilardan gosterilecekleri tam liste olarak dondurur; plan yoksa, akis bayatsa ya da baska veri setine
+    // aitse liste bos ve kismidir.
     public virtual async Task<RealtimeStreamModel<RealtimeServiceAlertStreamModel>> ProcessAsync(
         FeedMessageModel message, CancellationToken cancellationToken = default)
     {
         var snapshot = await snapshotManager.EnsureLoadedAsync(cancellationToken);
-        if (snapshot.Plan is null || await streamManager.IsStaleAsync(message.Header, cancellationToken))
+        if (snapshot.Plan is not { } plan)
             return new RealtimeStreamModel<RealtimeServiceAlertStreamModel>();
-        var now = (ulong)Clock.Now.ToUniversalTime().Subtract(DateTime.UnixEpoch).TotalSeconds;
+        var health = await streamManager.GetHealthAsync(snapshot, message, RealtimeFeedType.ServiceAlerts,
+            cancellationToken);
+        if (health != RealtimeFeedHealth.Healthy)
+            return new RealtimeStreamModel<RealtimeServiceAlertStreamModel> { Health = health };
+        streamManager.MarkProcessed(snapshot, RealtimeFeedType.ServiceAlerts, message.Header);
+        var now =(ulong)Clock.Now.ToUniversalTime().Subtract(DateTime.UnixEpoch).TotalSeconds;
         var entities = message.Entity.Where(entity => entity.Alert is not null).ToList();
-        var alerts = entities.Select(entity => ToStream(snapshot.Plan, entity.Id, entity.Alert!, now))
+        var alerts = entities.Select(entity => ToStream(plan, entity.Id, entity.Alert!, now))
             .OfType<RealtimeServiceAlertStreamModel>().ToList();
+        var unmatched = entities.Count(entity =>
+            !entity.Alert!.InformedEntity.Any(selector => snapshotManager.IsInPlan(plan, selector)));
         Logger.LogInformation(
             "Realtime service alerts processed: {Alerts} alerts, {Shown} shown, {Hidden} expired or not matched to the plan.",
             entities.Count, alerts.Count, entities.Count - alerts.Count);
-        return new RealtimeStreamModel<RealtimeServiceAlertStreamModel> { IsFullDataset = true, Entities = alerts };
+        return new RealtimeStreamModel<RealtimeServiceAlertStreamModel>
+        {
+            IsFullDataset = true, UnmatchedCount = unmatched, Entities = alerts
+        };
     }
 
     // Uyari gosterim araligindaysa ve kapsaminda planda karsiligi olan en az bir secici varsa uyariyi kurar. Gosterim araligi

@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Byd.GtfsRealtimeManagement.Workers.RealtimeFeeds;
+using Byd.GtfsRealtimeManagement.Workers.RealtimeStopTimes;
 using Byd.LogManagement;
 using Volo.Abp;
 using Volo.Abp.BackgroundWorkers;
@@ -26,9 +27,10 @@ public class GtfsRealtimeManagementApplicationModule : AbpModule
         context.Services.AddMapperlyObjectMapper<GtfsRealtimeManagementApplicationModule>();
     }
 
-    // GTFS-RT cekme iscisini baslatir.
+    // GTFS-RT cekme ve durak satiri saklama iscilerini baslatir.
     public override async Task OnPostApplicationInitializationAsync(ApplicationInitializationContext context)
     {
         await context.AddBackgroundWorkerAsync<RealtimeFeedFetchWorker>();
+        await context.AddBackgroundWorkerAsync<RealtimeStopTimeRetentionWorker>();
     }
 }

@@ -10,4 +10,7 @@ namespace Byd.GtfsRealtimeManagement.Interfaces.RealtimeFeeds;
 public interface IRealtimeFeedReader
 {
     Task<FeedMessageModel> ReadAsync(string sourceName, string url, CancellationToken cancellationToken = default);
+
+    // Kosullu istekle ceker; icerik son okumadan beri degismediyse (HTTP 304) bos doner.
+    Task<FeedMessageModel?> ReadIfChangedAsync(string sourceName, string url, CancellationToken cancellationToken = default);
 }

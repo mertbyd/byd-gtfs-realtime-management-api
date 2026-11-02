@@ -15,6 +15,7 @@ using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
+using Byd.GtfsRealtimeManagement.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Settings;
 using Volo.Abp.Domain.Services;
 using Volo.Abp.Settings;
@@ -23,10 +24,11 @@ using Volo.Abp.Uow;
 namespace Byd.GtfsRealtimeManagement.Managers.RealtimeStopTimes;
 
 // islevi: Arac konumu ve sefer guncellemesi akislarini plan kopyasiyla dogrular; aracin duraga girisini, cikisini,
-// durmadan gecisini ve sefer/durak durumunu bulup durak satirlarina yazar.
+// durmadan gecisini, sefer/durak durumunu ve hic aracla eslesmeyen (yapilmayan) seferi bulup durak satirlarina yazar.
 // sistemdeki gorevi: Islenmis modelin (RealtimeStopTime) yazaridir; her degisiklik kendisini kanitlayan cekmenin correlation
-// kimligini tasir. Araclarin son durumunu ve seferlerin tahmini durak zamanlarini bildirimle gitmek uzere dondurur. Bayat
-// akis islenmez; gecersiz kayit atlanir ve cekme basina ozet log'a yazilir.
+// kimligini tasir. Araclarin son durumunu ve seferlerin tahmini durak zamanlarini bildirimle gitmek uzere dondurur. Bayat,
+// baska veri setine ait ya da ayni baslik zamanli akis islenmez; gecersiz kayit atlanir, sayisi akisla gider ve cekme
+// basina ozet log'a yazilir.
 public class RealtimeStopTimeProcessingManager(
     RealtimeSnapshotManager snapshotManager,
     RealtimeStopTimeManager stopTimeManager,
@@ -44,32 +46,38 @@ public class RealtimeStopTimeProcessingManager(
     // Yaricap kontrolu aracin gectigi son duraktan sonraki bu kadar durakla sinirlidir; GPS atlamasi tolere edilir.
     private const int LookAheadStops = 3;
 
-    // Kayitsiz araclar icin kayit ister; her aracin seferindeki duraga giris ve cikisini bulup satirlara yazar ve araclarin
-    // akisla gidecek son durumunu dondurur. Bayat akis islenmez ve gosterilmez, konumu eski olculmus arac listeye girmez; plan
-    // yoksa araclar yalniz konumla doner.
+    // Kayitsiz araclar icin kayit ister; her aracin seferindeki duraga giris ve cikisini ve yapilmayan seferleri bulup
+    // satirlara yazar ve araclarin akisla gidecek son durumunu dondurur. Bayat, baska veri setine ait ya da tekrar eden akis
+    // islenmez ve gosterilmez, konumu eski olculmus arac listeye girmez; plan yoksa araclar yalniz konumla doner.
     public virtual async Task<RealtimeStreamModel<RealtimeVehicleStreamModel>> ProcessVehiclePositionsAsync(
         Guid realtimeSourceId,
         FeedMessageModel message, string correlationId, CancellationToken cancellationToken = default)
     {
         await snapshotManager.RequestUnregisteredVehiclesAsync(message, cancellationToken);
         var snapshot = await snapshotManager.EnsureLoadedAsync(cancellationToken);
-        if (await streamManager.IsStaleAsync(message.Header, cancellationToken))
-            return new RealtimeStreamModel<RealtimeVehicleStreamModel>();
+        var health = await streamManager.GetHealthAsync(snapshot, message, RealtimeFeedType.VehiclePositions,
+            cancellationToken);
+        if (health != RealtimeFeedHealth.Healthy
+            || streamManager.IsRepeated(snapshot, RealtimeFeedType.VehiclePositions, message.Header))
+            return new RealtimeStreamModel<RealtimeVehicleStreamModel> { Health = health };
         var positions = message.Entity.Select(entity => entity.Vehicle).OfType<VehiclePositionModel>().ToList();
-        if (snapshot.Plan is not null)
-            await TrackPositionsAsync(realtimeSourceId, snapshot, positions, correlationId, cancellationToken);
-        var freshSince = await streamManager.GetFreshSinceAsync(cancellationToken);
+        var unmatched = snapshot.Plan is null ? 0 : await TrackPositionsAsync(realtimeSourceId, snapshot, positions,
+            ToUtc((long)message.Header.Timestamp!.Value), correlationId, cancellationToken);
+        var freshSince = await streamManager.GetFreshSinceAsync(RealtimeFeedType.VehiclePositions, cancellationToken);
         return new RealtimeStreamModel<RealtimeVehicleStreamModel>
         {
             IsFullDataset = true,
+            UnmatchedCount = unmatched,
             Entities = positions.Select(position => ToStream(snapshot, position)).OfType<RealtimeVehicleStreamModel>()
                 .Where(vehicle => vehicle.MeasuredAt is not { } measuredAt || measuredAt >= freshSince).ToList()
         };
     }
 
-    // Konumlari plandaki duraklarla karsilastirip degisiklikleri yazar; eslesmeyen kayit sayisi log'a yazilir.
-    private async Task TrackPositionsAsync(Guid realtimeSourceId, RealtimeOrganizationSnapshotModel snapshot,
-        List<VehiclePositionModel> positions, string correlationId, CancellationToken cancellationToken = default)
+    // Konumlari plandaki duraklarla karsilastirip degisiklikleri ve yapilmayan seferleri yazar; eslesmeyen kayit sayisini
+    // dondurur ve log'a yazar.
+    private async Task<int> TrackPositionsAsync(Guid realtimeSourceId, RealtimeOrganizationSnapshotModel snapshot,
+        List<VehiclePositionModel> positions, DateTime feedTime, string correlationId,
+        CancellationToken cancellationToken = default)
     {
         var radius = await settingProvider.GetAsync<double>(GtfsRealtimeManagementSettings.Processing.StopRadiusMeters);
         var stoppedSpeed = await settingProvider.GetAsync<double>(
@@ -78,24 +86,43 @@ public class RealtimeStopTimeProcessingManager(
         var invalid = positions.Count(position =>
             !TrackPosition(snapshot, position, radius, stoppedSpeed, correlationId, changes));
         await MarkDepartureViolationsAsync(changes, cancellationToken);
+        await AddMissedTripsAsync(snapshot, feedTime, correlationId, changes, cancellationToken);
         await PersistAsync(realtimeSourceId, snapshot, changes, cancellationToken);
         Logger.LogInformation(
             "Realtime vehicle positions processed: {Positions} positions, {Changes} stop changes, {Invalid} not matched to the plan.",
             positions.Count, changes.Count, invalid);
+        return invalid;
     }
 
     // Sefer ve durak planlama durumunu ve gecikmeyi gunceller; iptal/silinen sefer ve atlanan durak satira yazilir. Plandaki
-    // seferlerin tahmini durak zamanlarini tam liste ya da yalniz degisenler olarak akisla gitmek uzere dondurur; bayat akis
-    // islenmez ve gosterilmez, guncellemesi eski olculmus sefer listeye girmez.
+    // seferlerin tahmini durak zamanlarini tam liste ya da yalniz degisenler olarak akisla gitmek uzere dondurur; bayat, baska
+    // veri setine ait ya da tekrar eden akis islenmez ve gosterilmez, guncellemesi eski olculmus sefer listeye girmez.
     public virtual async Task<RealtimeStreamModel<RealtimeTripUpdateStreamModel>> ProcessTripUpdatesAsync(
         Guid realtimeSourceId, FeedMessageModel message, string correlationId, CancellationToken cancellationToken = default)
     {
         var snapshot = await snapshotManager.EnsureLoadedAsync(cancellationToken);
-        if (snapshot.Plan is null || await streamManager.IsStaleAsync(message.Header, cancellationToken))
+        if (snapshot.Plan is null)
             return new RealtimeStreamModel<RealtimeTripUpdateStreamModel>();
-        var measuredAt = ToUtc((long)message.Header.Timestamp!.Value);
-        RemoveExpiredStatuses(snapshot, measuredAt);
+        var health = await streamManager.GetHealthAsync(snapshot, message, RealtimeFeedType.TripUpdates, cancellationToken);
+        if (health != RealtimeFeedHealth.Healthy
+            || streamManager.IsRepeated(snapshot, RealtimeFeedType.TripUpdates, message.Header))
+            return new RealtimeStreamModel<RealtimeTripUpdateStreamModel> { Health = health };
         var updates = message.Entity.Select(entity => entity.TripUpdate).OfType<TripUpdateModel>().ToList();
+        var trips = await TrackTripUpdatesAsync(realtimeSourceId, snapshot, updates,
+            ToUtc((long)message.Header.Timestamp!.Value), correlationId, cancellationToken);
+        var freshSince = await streamManager.GetFreshSinceAsync(RealtimeFeedType.TripUpdates, cancellationToken);
+        var stream = streamManager.ToTripUpdateStream(snapshot, trips.Where(trip => trip.MeasuredAt >= freshSince).ToList());
+        stream.UnmatchedCount = updates.Count - trips.Count;
+        return stream;
+    }
+
+    // Sefer guncellemelerini plandaki seferlere uygulayip durum degisikliklerini yazar; plana eslesen seferlerin akisla
+    // gidecek durumunu dondurur, eslesmeyen sayisini log'a yazar.
+    private async Task<List<RealtimeTripUpdateStreamModel>> TrackTripUpdatesAsync(Guid realtimeSourceId,
+        RealtimeOrganizationSnapshotModel snapshot, List<TripUpdateModel> updates, DateTime measuredAt,
+        string correlationId, CancellationToken cancellationToken = default)
+    {
+        RemoveExpiredStatuses(snapshot, measuredAt);
         var changes = new List<RealtimeStopTimeChangeModel>();
         var trips = updates.Select(update => TrackTripUpdate(snapshot, update, measuredAt, correlationId, changes))
             .OfType<RealtimeTripUpdateStreamModel>().ToList();
@@ -103,8 +130,7 @@ public class RealtimeStopTimeProcessingManager(
         Logger.LogInformation(
             "Realtime trip updates processed: {Updates} trips, {Changes} status changes, {Invalid} not matched to the plan.",
             updates.Count, changes.Count, updates.Count - trips.Count);
-        var freshSince = await streamManager.GetFreshSinceAsync(cancellationToken);
-        return streamManager.ToTripUpdateStream(snapshot, trips.Where(trip => trip.MeasuredAt >= freshSince).ToList());
+        return trips;
     }
 
     // Aracin bildirimle gidecek durumunu kurar: konum, plandaki seferi ve hatti, bulundugu ve siradaki durak, siradaki durak icin
@@ -147,6 +173,7 @@ public class RealtimeStopTimeProcessingManager(
         var measuredAt = DateTimeOffset.FromUnixTimeSeconds((long)timestamp).UtcDateTime;
         if (snapshotManager.ResolveTripInstance(snapshot.Plan!, position.Trip, measuredAt) is not { } instance)
             return false;
+        snapshot.ObservedTrips[ObservedTripKey(instance.Trip.GtfsTripId, instance.ServiceDate)] = instance.ServiceDate;
         var visit = GetVisit(snapshot, gtfsVehicleId, snapshotManager.GetTripKey(instance));
         var template = new RealtimeStopTimeChangeModel
         {
@@ -308,6 +335,49 @@ public class RealtimeStopTimeProcessingManager(
         }
     }
 
+    // Kesintisiz izlenen ve son planlanan varisindan bekleme suresi kadar sonra hala hicbir aracla eslesmemis seferin her
+    // duragina yapilmayan sefer ihlali yazilir. Izleme yeni basladiysa bu cekmede yalniz izleme ani isaretlenir.
+    private async Task AddMissedTripsAsync(RealtimeOrganizationSnapshotModel snapshot, DateTime feedTime,
+        string correlationId, List<RealtimeStopTimeChangeModel> changes, CancellationToken cancellationToken = default)
+    {
+        RemoveExpiredObservedTrips(snapshot, feedTime);
+        if (snapshot.WatchedSince is not { } watchedSince)
+        {
+            (snapshot.WatchedSince, snapshot.MissedTripsCheckedUntil) = (feedTime, feedTime);
+            return;
+        }
+        var grace = TimeSpan.FromMinutes(await settingProvider.GetAsync<int>(
+            GtfsRealtimeManagementSettings.Processing.MissedTripGraceMinutes));
+        var checkedUntil = snapshot.MissedTripsCheckedUntil ?? feedTime;
+        var missed = snapshot.Plan!.Trips.Values
+            .Where(trip => !trip.IsFrequencyBased && trip.StopTimes.Count > 0)
+            .SelectMany(trip => snapshotManager.GetServiceDates(trip, feedTime)
+                .Select(serviceDate => new RealtimeTripInstanceModel { Trip = trip, ServiceDate = serviceDate }))
+            .Where(instance => IsMissed(snapshot, instance, watchedSince, checkedUntil, feedTime, grace));
+        changes.AddRange(missed.SelectMany(instance => instance.Trip.StopTimes.Select(stop => new RealtimeStopTimeChangeModel
+        {
+            Instance = instance, Stop = stop, Kind = RealtimeStopTimeChangeKind.Status, CorrelationId = correlationId,
+            ViolationTypeCode = ViolationTypeConsts.MissedTripCode
+        })));
+        snapshot.MissedTripsCheckedUntil = feedTime;
+    }
+
+    // Sefer ornegi o gun planda calisiyor, hicbir aracla eslesmedi, iptal edilmedi, izleme basladiktan sonra kalkacakti ve
+    // bekleme suresi bu kontrol araliginda doldu. Siklik tabanli seferin planli saatleri sablon oldugu icin degerlendirilmez.
+    private bool IsMissed(RealtimeOrganizationSnapshotModel snapshot, RealtimeTripInstanceModel instance,
+        DateTime watchedSince, DateTime checkedUntil, DateTime feedTime, TimeSpan grace)
+    {
+        if (snapshot.ObservedTrips.ContainsKey(ObservedTripKey(instance.Trip.GtfsTripId, instance.ServiceDate))
+            || !snapshotManager.IsTripScheduled(snapshot.Plan!, instance.Trip.GtfsTripId, instance.ServiceDate))
+            return false;
+        var (first, last) = (instance.Trip.StopTimes[0], instance.Trip.StopTimes[^1]);
+        var deadline = snapshotManager.GetScheduledTime(instance, last.ArrivalTime ?? last.DepartureTime) + grace;
+        return deadline > checkedUntil && deadline <= feedTime
+            && snapshotManager.GetScheduledTime(instance, first.DepartureTime ?? first.ArrivalTime) >= watchedSince
+            && !IsTripRemoved(FindStatus(snapshot, instance, first)?.TripScheduleRelationshipCode
+                              ?? TripScheduleRelationshipConsts.ScheduledCode);
+    }
+
     // Degisiklikleri servis gunune gore gruplayip tek is biriminde mevcut satirlara uygular, eksik satirlari kurar.
     private async Task PersistAsync(Guid realtimeSourceId, RealtimeOrganizationSnapshotModel snapshot,
         List<RealtimeStopTimeChangeModel> changes, CancellationToken cancellationToken = default)
@@ -348,7 +418,7 @@ public class RealtimeStopTimeProcessingManager(
     private RealtimeStopTime Create(Guid realtimeSourceId, RealtimeOrganizationSnapshotModel snapshot,
         RealtimeStopTimeChangeModel change, RealtimeStopTimeLookupIdsModel lookups)
     {
-        var status = FindStatus(snapshot, change);
+        var status = FindStatus(snapshot, change.Instance, change.Stop);
         return stopTimeManager.CreateProcessed(realtimeSourceId, snapshot.Plan!.FeedId, change.Instance, change.Stop,
             LookupId(lookups.TripScheduleRelationships, status?.TripScheduleRelationshipCode,
                 TripScheduleRelationshipConsts.ScheduledCode)!.Value,
@@ -360,7 +430,7 @@ public class RealtimeStopTimeProcessingManager(
     private void Apply(RealtimeStopTime row, RealtimeOrganizationSnapshotModel snapshot, RealtimeStopTimeChangeModel change,
         RealtimeStopTimeLookupIdsModel lookups)
     {
-        var status = FindStatus(snapshot, change);
+        var status = FindStatus(snapshot, change.Instance, change.Stop);
         Guid? vehicleId = change.GtfsVehicleId is { } gtfsVehicleId
             && snapshot.VehicleIds.TryGetValue(gtfsVehicleId, out var id) ? id : null;
         if (change.Kind == RealtimeStopTimeChangeKind.Arrival)
@@ -442,9 +512,20 @@ public class RealtimeStopTimeProcessingManager(
             snapshot.StopStatuses.TryRemove(pair);
     }
 
+    // Iki gunden eski servis gunlerinin aracla eslesmis sefer kayitlarini kopyadan atar.
+    private static void RemoveExpiredObservedTrips(RealtimeOrganizationSnapshotModel snapshot, DateTime feedTime)
+    {
+        var oldest = DateOnly.FromDateTime(feedTime).AddDays(-2);
+        foreach (var pair in snapshot.ObservedTrips.Where(pair => pair.Value < oldest))
+            snapshot.ObservedTrips.TryRemove(pair);
+    }
+
+    // Sefer orneginin baslangic saatinden bagimsiz anahtari; siklik tabanli olmayan seferde sefer ve gun ornegi tekildir.
+    private static string ObservedTripKey(string gtfsTripId, DateOnly serviceDate) => $"{gtfsTripId}|{serviceDate:yyyyMMdd}";
+
     private RealtimeStopStatusModel? FindStatus(RealtimeOrganizationSnapshotModel snapshot,
-        RealtimeStopTimeChangeModel change)
-        => snapshot.StopStatuses.GetValueOrDefault(snapshotManager.GetStopKey(change.Instance, change.Stop.StopSequence));
+        RealtimeTripInstanceModel instance, RealtimeStopTimeSnapshotModel stop)
+        => snapshot.StopStatuses.GetValueOrDefault(snapshotManager.GetStopKey(instance, stop.StopSequence));
 
     private static RealtimeStopTimeChangeModel With(RealtimeStopTimeChangeModel template, RealtimeStopTimeSnapshotModel stop,
         RealtimeStopTimeChangeKind kind)

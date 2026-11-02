@@ -27,7 +27,8 @@ public class DapperRealtimeSnapshotRepository(IDbContextProvider<GtfsRealtimeMan
         => (await QueryAsync<RealtimeVehicleSnapshotModel>(RealtimeSnapshotConsts.VehiclesSql,
             new { tenantId, organizationId }, cancellationToken)).ToList();
 
-    // Organizasyonun aktif feed'inin seferlerini, durak kimliklerini ve servis takvimlerini okur; aktif feed yoksa bos doner.
+    // Organizasyonun aktif feed'inin surumunu, seferlerini, durak kimliklerini ve servis takvimlerini okur; aktif feed yoksa
+    // bos doner.
     public virtual async Task<RealtimePlanSnapshotModel?> GetActivePlanAsync(
         Guid tenantId, Guid organizationId, CancellationToken cancellationToken = default)
     {
@@ -40,6 +41,8 @@ public class DapperRealtimeSnapshotRepository(IDbContextProvider<GtfsRealtimeMan
         return new RealtimePlanSnapshotModel
         {
             FeedId = feedId.Value,
+            FeedVersion = (await QueryAsync<string?>(RealtimeSnapshotConsts.FeedVersionSql, new { feedId },
+                cancellationToken)).FirstOrDefault(),
             Trips = trips,
             RouteIds = trips.Values.Select(trip => trip.GtfsRouteId).ToHashSet(),
             AgencyIds = trips.Values.Select(trip => trip.GtfsAgencyId).OfType<string>().ToHashSet(),

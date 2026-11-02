@@ -5,37 +5,100 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Byd.GtfsRealtimeManagement.Consts;
+using Byd.GtfsRealtimeManagement.Managers.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Models.RealtimeSnapshots;
 using Byd.GtfsRealtimeManagement.Models.RealtimeStreams;
+using Byd.GtfsRealtimeManagement.RealtimeFeeds;
 using Byd.GtfsRealtimeManagement.Settings;
 using Volo.Abp.Domain.Services;
 using Volo.Abp.Settings;
 
 namespace Byd.GtfsRealtimeManagement.Managers.RealtimeStreams;
 
-// islevi: Akisin ve kayitlarin guncelligini olcer; sefer tahminlerini GTFS-RT incrementality kuralina gore tam liste ya da
-// yalniz degisenler olarak hazirlar.
+// islevi: Akisin sagligini (guncellik ve veri seti uyumu) ve kayitlarin guncelligini olcer; ayni yaniti ikinci kez
+// isletmez; sefer tahminlerini GTFS-RT incrementality kuralina gore tam liste ya da yalniz degisenler olarak hazirlar.
 // sistemdeki gorevi: Tam liste belirli aralikla gider ki sonradan baglanan istemci de butun seferleri alsin; aradaki
 // cekmelerde yalniz tahmini degisen ya da yeni seferler ve akistan dusen seferler (silindi isaretiyle) gider. Bildirim
-// boyutu boyle kuculur. Eski veri guncel gibi gosterilmez: bayat akis hic islenmez, eski olcumlu kayit akisa girmez.
-public class RealtimeStreamManager(ISettingProvider settingProvider) : DomainService
+// boyutu boyle kuculur. Eski veri guncel gibi gosterilmez: bayat ya da baska veri setine ait akis hic islenmez, eski
+// olcumlu kayit akisa girmez. Saglik degisimi cekme adiminda organizasyona bildirilir.
+public class RealtimeStreamManager(
+    ISettingProvider settingProvider,
+    RealtimeSnapshotManager snapshotManager) : DomainService
 {
-    // Baslik zamani yoksa ya da ayardaki esikten eskiyse akis bayattir; islenmez ve gosterilmez.
-    public virtual async Task<bool> IsStaleAsync(FeedHeaderModel header, CancellationToken cancellationToken = default)
+    // Akisin islenip islenemeyecegini soyler: bayat akis Stale, organizasyonun aktif veri setine ait olmayan akis
+    // PlanMismatch; plan yoksa akis plana gore degerlendirilmez.
+    public virtual async Task<RealtimeFeedHealth> GetHealthAsync(RealtimeOrganizationSnapshotModel snapshot,
+        FeedMessageModel message, RealtimeFeedType feedType, CancellationToken cancellationToken = default)
     {
-        var freshSince = await GetFreshSinceAsync(cancellationToken);
-        var stale = header.Timestamp is not { } timestamp
-                    || DateTimeOffset.FromUnixTimeSeconds((long)timestamp).UtcDateTime < freshSince;
+        if (await IsStaleAsync(message.Header, feedType, cancellationToken))
+            return RealtimeFeedHealth.Stale;
+        return snapshot.Plan is { } plan && !snapshotManager.IsSameDataset(plan, message)
+            ? RealtimeFeedHealth.PlanMismatch
+            : RealtimeFeedHealth.Healthy;
+    }
+
+    // Icerik degismedigi icin (HTTP 304) yanitsiz gecen cekmede akis, son islenen baslik zamani esikten eskiyse bayattir;
+    // uygulama yeniden basladiktan sonra henuz islenen yanit yoksa onceki saglik korunur.
+    public virtual async Task<RealtimeFeedHealth> GetUnchangedHealthAsync(RealtimeOrganizationSnapshotModel snapshot,
+        RealtimeFeedType feedType, CancellationToken cancellationToken = default)
+    {
+        if (!snapshot.ProcessedHeaderTimestamps.TryGetValue(feedType, out var timestamp))
+            return snapshot.FeedHealth.GetValueOrDefault(feedType);
+        return ToUtc(timestamp) < await GetFreshSinceAsync(feedType, cancellationToken)
+            ? RealtimeFeedHealth.Stale
+            : RealtimeFeedHealth.Healthy;
+    }
+
+    // Baslik zamani son islenenden yeni degilse yanit tekrardir ve islenmez (GTFS-RT: baslik zamani icerik degistikce
+    // degisir, geri gitmez); yeniyse islendi olarak isaretlenir.
+    public virtual bool IsRepeated(RealtimeOrganizationSnapshotModel snapshot, RealtimeFeedType feedType,
+        FeedHeaderModel header)
+    {
+        if (snapshot.ProcessedHeaderTimestamps.TryGetValue(feedType, out var processed) && processed >= header.Timestamp)
+            return true;
+        MarkProcessed(snapshot, feedType, header);
+        return false;
+    }
+
+    // Islenen yanitin baslik zamanini kopyaya yazar; icerik degismedigi cekmede bayatlik bu zamandan olculur.
+    public virtual void MarkProcessed(RealtimeOrganizationSnapshotModel snapshot, RealtimeFeedType feedType,
+        FeedHeaderModel header)
+        => snapshot.ProcessedHeaderTimestamps[feedType] = header.Timestamp!.Value;
+
+    // Akisin sagligini kopyaya yazar; oncekinden farkliysa true doner. Konum akisi sagliksizsa izleme kesilir, yapilmayan
+    // sefer karari yalniz kesintisiz izlenen seferlere verilir.
+    public virtual bool ChangeHealth(RealtimeOrganizationSnapshotModel snapshot, RealtimeFeedType feedType,
+        RealtimeFeedHealth health)
+    {
+        if (feedType == RealtimeFeedType.VehiclePositions && health != RealtimeFeedHealth.Healthy)
+            snapshot.WatchedSince = null;
+        var previous = snapshot.FeedHealth.GetValueOrDefault(feedType);
+        snapshot.FeedHealth[feedType] = health;
+        return previous != health;
+    }
+
+    // Bu andan once olculmus kayit guncel sayilmaz ve akisa girmez; esik akis turunun bayatlik esigidir.
+    public virtual async Task<DateTime> GetFreshSinceAsync(RealtimeFeedType feedType,
+        CancellationToken cancellationToken = default)
+        => Clock.Now.ToUniversalTime().AddSeconds(-await settingProvider.GetAsync<int>(
+            feedType == RealtimeFeedType.ServiceAlerts
+                ? GtfsRealtimeManagementSettings.Processing.ServiceAlertsStaleFeedSeconds
+                : GtfsRealtimeManagementSettings.Processing.StaleFeedSeconds));
+
+    // Baslik zamani yoksa ya da akis turunun esiginden eskiyse akis bayattir; islenmez ve gosterilmez.
+    private async Task<bool> IsStaleAsync(FeedHeaderModel header, RealtimeFeedType feedType,
+        CancellationToken cancellationToken = default)
+    {
+        var freshSince = await GetFreshSinceAsync(feedType, cancellationToken);
+        var stale = header.Timestamp is not { } timestamp || ToUtc(timestamp) < freshSince;
         if (stale)
-            Logger.LogWarning("Realtime feed skipped as stale: header timestamp {Timestamp}.", header.Timestamp);
+            Logger.LogWarning("Realtime {FeedType} feed skipped as stale: header timestamp {Timestamp}.", feedType,
+                header.Timestamp);
         return stale;
     }
 
-    // Bu andan once olculmus kayit guncel sayilmaz ve akisa girmez; esik bayat akis esigiyle aynidir.
-    public virtual async Task<DateTime> GetFreshSinceAsync(CancellationToken cancellationToken = default)
-        => Clock.Now.ToUniversalTime().AddSeconds(
-            -await settingProvider.GetAsync<int>(GtfsRealtimeManagementSettings.Processing.StaleFeedSeconds));
+    private static DateTime ToUtc(ulong unixSeconds) => DateTimeOffset.FromUnixTimeSeconds((long)unixSeconds).UtcDateTime;
 
     // Araligi dolduysa butun seferleri, dolmadiysa son gonderimden beri degisenleri dondurur; gonderilen durumu kopyaya yazar.
     public virtual RealtimeStreamModel<RealtimeTripUpdateStreamModel> ToTripUpdateStream(

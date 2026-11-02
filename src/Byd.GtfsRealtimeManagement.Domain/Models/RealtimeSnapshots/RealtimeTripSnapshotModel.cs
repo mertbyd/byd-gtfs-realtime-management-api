@@ -16,5 +16,8 @@ public class RealtimeTripSnapshotModel
     // Isletmecinin IANA saat dilimi; servis gunu ve planlanan saatler bu dilimde okunur.
     public string? Timezone { get; set; }
 
+    // Sefer frequencies.txt'te; gun icinde birden cok ornekle calisir, duraklarin saatleri sablondur.
+    public bool IsFrequencyBased { get; set; }
+
     public List<RealtimeStopTimeSnapshotModel> StopTimes { get; set; } = [];
 }

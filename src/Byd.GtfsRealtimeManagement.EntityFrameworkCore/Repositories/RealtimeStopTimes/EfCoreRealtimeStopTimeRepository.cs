@@ -39,6 +39,13 @@ public class EfCoreRealtimeStopTimeRepository(
         IDataTablePagingProperty<TFiltering> pagingProperty)
         => WithLookups(await base.CreateFilteredQueryAsync(pagingProperty));
 
+    // Saklama suresi kapsamdan bagimsizdir; kaynak, tenant ve organizasyon filtreleri bu silmede uygulanmaz. Satirlar
+    // bellege alinmadan tek komutla silinir.
+    public virtual async Task<int> DeleteBeforeAsync(DateOnly serviceDate, CancellationToken cancellationToken = default)
+        => await (await GetDbSetAsync()).IgnoreQueryFilters()
+            .Where(value => value.ServiceDate < serviceDate)
+            .ExecuteDeleteAsync(cancellationToken);
+
     // Cevapta gosterilecek kaynak ve lookup adlarini tek sorguda yukler.
     private static IQueryable<RealtimeStopTime> WithLookups(IQueryable<RealtimeStopTime> query)
         => query.Include(value => value.RealtimeSource)

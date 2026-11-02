@@ -106,9 +106,9 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
             ?? throw new BusinessException(RealtimeSourceExceptionCodes.ActiveSourceRequired);
     }
 
-    // Kaynagin adresi tanimli her akisini bir kez okur (okuyucu GTFS-RT bicimini ve surumunu dogrular) ve akistaki sefer ve
-    // uyari kimliklerinin organizasyonun aktif GTFS planinda karsiligi oldugunu dogrular. Plana atif yapmayan bos akis kabul
-    // edilir; atif yapip hicbiri eslesmeyen akis baska bir veri setine aittir.
+    // Kaynagin adresi tanimli her akisini bir kez okur (okuyucu GTFS-RT bicimini ve surumunu dogrular) ve akisin
+    // organizasyonun aktif GTFS veri setine ait oldugunu dogrular: surum farkli ya da atiflarindan hicbiri planda yoksa akis
+    // baska bir veri setine aittir.
     public virtual async Task EnsureMatchesPlanAsync(RealtimeSource source, CancellationToken cancellationToken = default)
     {
         var plan = (await SnapshotManager.EnsureLoadedAsync(cancellationToken)).Plan
@@ -116,8 +116,7 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
         foreach (var feed in Feeds.Where(feed => feed.Url(source) is not null))
         {
             var message = await FeedReader.ReadAsync(source.Name, feed.Url(source)!, cancellationToken);
-            var matches = message.Entity.SelectMany(entity => MatchPlan(entity, plan)).ToList();
-            if (matches.Count > 0 && !matches.Contains(true))
+            if (!SnapshotManager.IsSameDataset(plan, message))
                 throw new BusinessException(RealtimeSourceExceptionCodes.FeedPlanMismatch)
                     .WithData("FeedType", feed.FeedType.ToString());
         }
@@ -185,15 +184,6 @@ public class RealtimeSourceManager(IRealtimeSourceRepository repository)
         var message = await FeedReader.ReadAsync(source.Name, GetFeedUrl(source, feedType), cancellationToken);
         return message.Entity.Select(select).OfType<TMessage>().ToList();
     }
-
-    // Varligin plana her atfi icin planda karsiligi olup olmadigi: arac konumu ve sefer guncellemesinin seferi, uyarinin
-    // kapsam secicileri.
-    private IEnumerable<bool> MatchPlan(FeedEntityModel entity, RealtimePlanSnapshotModel plan)
-        => entity.Alert is { } alert
-            ? alert.InformedEntity.Select(selector => SnapshotManager.IsInPlan(plan, selector))
-            : (entity.Vehicle?.Trip ?? entity.TripUpdate?.Trip)?.TripId is { } tripId
-                ? [plan.Trips.ContainsKey(tripId)]
-                : [];
 
     // Birlesik baslik: en yeni standart surum ve en eski parcanin zamani; icerik ancak o an kadar gunceldir.
     private static FeedMessageModel Merge(List<FeedMessageModel> messages) => new()

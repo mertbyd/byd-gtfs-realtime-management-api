@@ -1,9 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Byd.CoreExtensions.ExceptionCodes;
 using Byd.CoreExtensions.Managers;
 using Byd.CoreExtensions.Querying;
+using Byd.GtfsRealtimeManagement.Consts;
 using Byd.GtfsRealtimeManagement.Entities.Lookups;
 using Byd.GtfsRealtimeManagement.Entities.RealtimeStopTimes;
 using Byd.GtfsRealtimeManagement.Interfaces;
@@ -17,8 +19,8 @@ using Volo.Abp.Domain.Repositories;
 
 namespace Byd.GtfsRealtimeManagement.Managers.RealtimeStopTimes;
 
-// islevi: Durak satirinin aktif kaynak, lookup ve tekillik kurallarini uygular.
-// sistemdeki gorevi: CRUD mutasyonlarinin domain sahibidir.
+// islevi: Durak satirinin aktif kaynak, lookup, tekillik ve saklama suresi kurallarini uygular.
+// sistemdeki gorevi: CRUD mutasyonlarinin ve saklama silmesinin domain sahibidir.
 public class RealtimeStopTimeManager(
     IRealtimeStopTimeRepository repository,
     RealtimeSourceManager sourceManager,
@@ -83,6 +85,14 @@ public class RealtimeStopTimeManager(
             Operator = DataTableFilterOperator.Equal,
             Value = realtimeSourceId.ToString()
         };
+    }
+
+    // Servis gunu saklama suresinden eski satirlari butun kaynaklarda siler; ham kanit log modulunde ayri saklanir.
+    public virtual async Task DeleteExpiredAsync(CancellationToken cancellationToken = default)
+    {
+        var before = DateOnly.FromDateTime(Clock.Now.ToUniversalTime()).AddDays(-RealtimeStopTimeConsts.RetentionDays);
+        var deleted = await repository.DeleteBeforeAsync(before, cancellationToken);
+        Logger.LogInformation("Realtime stop times older than {ServiceDate} deleted: {Count} rows.", before, deleted);
     }
 
     // Isleme adiminin ilk kez gordugu sefer orneginin duragi icin satir kurar; durum kimlikleri lookup tablosundan gelir.

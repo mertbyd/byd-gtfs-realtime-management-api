@@ -101,12 +101,19 @@ public class RealtimeSnapshotManager(
         if (trip.TripId is not { } tripId || !plan.Trips.TryGetValue(tripId, out var planned))
             return null;
         var local = TimeZoneInfo.ConvertTimeFromUtc(measuredAtUtc, FindTimeZone(planned.Timezone));
-        var today = DateOnly.FromDateTime(local);
         var hasStartDate = DateOnly.TryParseExact(trip.StartDate, "yyyyMMdd", out var startDate);
-        foreach (var date in hasStartDate ? [startDate] : new[] { today, today.AddDays(-1) })
+        foreach (var date in hasStartDate ? [startDate] : GetServiceDates(planned, measuredAtUtc))
             if (IsTripScheduled(plan, tripId, date) && (hasStartDate || IsWithinTripWindow(planned, date, local)))
                 return new RealtimeTripInstanceModel { Trip = planned, ServiceDate = date, StartTime = trip.StartTime };
         return null;
+    }
+
+    // Olcum anina gore seferin aday servis gunleri: isletmecinin yerel gunu ve gece yarisini asan seferler icin bir onceki
+    // gun.
+    public virtual DateOnly[] GetServiceDates(RealtimeTripSnapshotModel trip, DateTime measuredAtUtc)
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(measuredAtUtc, FindTimeZone(trip.Timezone)));
+        return [today, today.AddDays(-1)];
     }
 
     // Sefer orneginin anahtari; arac ziyareti sefer degisince bu anahtarla sifirlanir.
@@ -128,6 +135,16 @@ public class RealtimeSnapshotManager(
                && (selector.RouteId is null || plan.RouteIds.Contains(selector.RouteId))
                && (selector.Trip?.TripId is null || plan.Trips.ContainsKey(selector.Trip.TripId))
                && (selector.StopId is null || plan.StopIds.Contains(selector.StopId));
+    }
+
+    // Akis organizasyonun aktif veri setine mi ait. Iki taraf da surum verdiyse FeedHeader.feed_version, feed_info.feed_version
+    // ile ayni olmali; akis plana atif yaptiysa en az biri planda bulunmali. Plana atif yapmayan bos akis kabul edilir.
+    public virtual bool IsSameDataset(RealtimePlanSnapshotModel plan, FeedMessageModel message)
+    {
+        if (message.Header.FeedVersion is { } version && plan.FeedVersion is { } planVersion && version != planVersion)
+            return false;
+        var matches = message.Entity.SelectMany(entity => MatchPlan(plan, entity)).ToList();
+        return matches.Count == 0 || matches.Contains(true);
     }
 
     // Sefer orneginin planlanan GTFS saatini UTC ana cevirir. GTFS kurali: saat, servis gununun yerel ogle saatinden 12 saat
@@ -205,6 +222,15 @@ public class RealtimeSnapshotManager(
             WheelchairAccessible = position.Vehicle.WheelchairAccessible
         };
     }
+
+    // Varligin plana her atfi icin planda karsiligi olup olmadigi: arac konumu ve sefer guncellemesinin seferi, uyarinin
+    // kapsam secicileri.
+    private IEnumerable<bool> MatchPlan(RealtimePlanSnapshotModel plan, FeedEntityModel entity)
+        => entity.Alert is { } alert
+            ? alert.InformedEntity.Select(selector => IsInPlan(plan, selector))
+            : (entity.Vehicle?.Trip ?? entity.TripUpdate?.Trip)?.TripId is { } tripId
+                ? [plan.Trips.ContainsKey(tripId)]
+                : [];
 
     // Haftalik takvimde servisin o haftanin gununde acik olup olmadigini verir.
     private static bool RunsOn(RealtimeServiceSnapshotModel service, DayOfWeek day) => day switch

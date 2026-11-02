@@ -10,6 +10,7 @@ public static class ViolationTypeConsts
     public const string CodeIndex = "IX_ViolationTypes_Code";
 
     // Isleme adiminin durak satirina yazdigi ihlal kodlari.
+    public const int MissedTripCode = 1;
     public const int CanceledTripCode = 2;
     public const int SkippedStopCode = 3;
     public const int EarlyDepartureCode = 4;

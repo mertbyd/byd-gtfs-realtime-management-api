@@ -21,9 +21,18 @@ public static class RealtimeSnapshotConsts
         where tenant_id = @tenantId and organization_id = @organizationId and is_active
         """;
 
+    // Veri setinin feed_info.feed_version degeri; akisin FeedHeader.feed_version'i bununla karsilastirilir.
+    public const string FeedVersionSql = """
+        select version
+        from gtfs_management."FeedInfos"
+        where feed_id = @feedId
+        """;
+
+    // Siklik tabanli sefer (frequencies.txt) gun icinde birden cok ornekle calisir; planli saatleri sablondur.
     public const string TripsSql = """
         select t.gtfs_trip_id as GtfsTripId, sv.gtfs_service_id as GtfsServiceId, r.gtfs_route_id as GtfsRouteId,
-               rt.code as RouteType, a.gtfs_agency_id as GtfsAgencyId, a.timezone as Timezone
+               rt.code as RouteType, a.gtfs_agency_id as GtfsAgencyId, a.timezone as Timezone,
+               exists (select 1 from gtfs_management."Frequencies" f where f.trip_id = t.id) as IsFrequencyBased
         from gtfs_management."Trips" t
         join gtfs_management."Services" sv on sv.id = t.service_id
         join gtfs_management."Routes" r on r.id = t.route_id
