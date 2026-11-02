@@ -24,9 +24,9 @@ using Xunit;
 
 namespace Byd.GtfsRealtimeManagement.EntityFrameworkCore.RealtimeStopTimes;
 
-// islevi: Arac konumundan giris/cikis/gecis ve sefer guncellemesinden iptal durumunun durak satirlarina yazildigini; sefer
-// guncellemesinden durak tahminlerinin GTFS-RT kurallariyla hesaplanip tam liste ya da yalniz degisenler olarak dondugunu
-// dogrular.
+// islevi: Arac konumundan giris/cikis/gecis ve erken/gec kalkis ihlalinin, sefer guncellemesinden iptal durumunun durak
+// satirlarina yazildigini; sefer guncellemesinden durak tahminlerinin GTFS-RT kurallariyla hesaplanip tam liste ya da
+// yalniz degisenler olarak dondugunu dogrular.
 // sistemdeki gorevi: Plan kopyasi sahteyle verilir; satirlar gercek repository ile SQLite'a yazilir.
 public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEntityFrameworkCoreTestBase
 {
@@ -35,15 +35,19 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
     private static readonly Guid VehicleId = Guid.NewGuid();
     private readonly IRealtimeSnapshotRepository _snapshotRepository = Substitute.For<IRealtimeSnapshotRepository>();
 
+    // T3'un ilk duraginin planlanan kalkisi; kalkis ihlali testi plan yuklenmeden once olcum anina gore kurar.
+    private string _scheduledDeparture = "00:00:00";
+
     private RealtimeStopTimeProcessingManager Processing =>
         ServiceProvider.GetRequiredService<RealtimeStopTimeProcessingManager>();
 
-    // Plan kopyasini uc durakli, her gun calisan tek seferle kurar; dagitik olay yolu sahtedir.
+    // Plan kopyasini her gun calisan seferlerle kurar; plan ilk okundugunda olusur. Dagitik olay yolu sahtedir.
     protected override void AfterAddApplication(IServiceCollection services)
     {
         _snapshotRepository.GetVehiclesAsync(TenantId, OrganizationId, Arg.Any<CancellationToken>())
             .Returns([new RealtimeVehicleSnapshotModel { VehicleId = VehicleId, GtfsVehicleId = "V1" }]);
-        _snapshotRepository.GetActivePlanAsync(TenantId, OrganizationId, Arg.Any<CancellationToken>()).Returns(Plan());
+        _snapshotRepository.GetActivePlanAsync(TenantId, OrganizationId, Arg.Any<CancellationToken>())
+            .Returns(_ => Plan());
         services.Replace(ServiceDescriptor.Singleton(_snapshotRepository));
         services.Replace(ServiceDescriptor.Singleton(Substitute.For<IDistributedEventBus>()));
     }
@@ -69,9 +73,29 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
         Assert.Equal("c-2", rows[2].DepartureCorrelationId);
         Assert.Equal("c-2", rows[3].ArrivalCorrelationId);
         Assert.Null(rows[3].DepartureTime);
-        var delay = DateTimeOffset.FromUnixTimeSeconds(now + 20).UtcDateTime - DateTime.UtcNow.Date;
-        Assert.Equal(delay.TotalSeconds > 300 ? ViolationId(ViolationTypeConsts.LateDepartureCode) : null,
-            rows[1].ViolationTypeId);
+    }
+
+    [Theory]
+    [InlineData(-120, ViolationTypeConsts.EarlyDepartureCode)]
+    [InlineData(120, null)]
+    [InlineData(600, ViolationTypeConsts.LateDepartureCode)]
+    public async Task VehiclePositions_MarkDepartureAgainstScheduledTime(int delaySeconds, int? violationCode)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var serviceDate = DateTimeOffset.FromUnixTimeSeconds(now).UtcDateTime.Date.AddDays(-1);
+        var departedAt = DateTimeOffset.FromUnixTimeSeconds(now + 20).UtcDateTime;
+        _scheduledDeparture = GtfsTime(departedAt.AddSeconds(-delaySeconds) - serviceDate);
+        var sourceId = await PrepareAsync();
+        using var tenant = ServiceProvider.GetRequiredService<ICurrentTenant>().Change(TenantId);
+        using var organization = ServiceProvider.GetRequiredService<ICurrentOrganization>().Change(OrganizationId);
+        var trip = new TripDescriptorModel { TripId = "T3", StartDate = serviceDate.ToString("yyyyMMdd") };
+
+        await Processing.ProcessVehiclePositionsAsync(sourceId, Position(now, 54.6800, 25.2700, trip), "c-1");
+        await Processing.ProcessVehiclePositionsAsync(sourceId, Position(now + 20, 54.6900, 25.2900, trip), "c-2");
+
+        var departure = (await RowsAsync()).Single(row => row.StopSequence == 1);
+        Assert.Equal(departedAt, departure.DepartureTime);
+        Assert.Equal(violationCode is { } code ? ViolationId(code) : null, departure.ViolationTypeId);
     }
 
     [Fact]
@@ -187,8 +211,12 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
     private Task<List<RealtimeStopTime>> RowsAsync()
         => WithUnitOfWorkAsync(() => ServiceProvider.GetRequiredService<IRealtimeStopTimeRepository>().GetListAsync());
 
-    // Duraklar 1 km arayla dizilidir; seferler UTC gunun tamaminda planlidir. T2'nin her duraginin planlanan saati vardir.
-    private static RealtimePlanSnapshotModel Plan() => new()
+    // "HH:MM:SS" GTFS saati; servis gunu gece yarisindan sayilir, saat 24'u asabilir.
+    private static string GtfsTime(TimeSpan time) => $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
+
+    // Duraklar 1 km arayla dizilidir; seferler UTC gunun tamaminda planlidir. T2'nin her duraginin planlanan saati vardir;
+    // T3 start_date ile gelir ve ilk duraginin kalkisi teste gore kurulur.
+    private RealtimePlanSnapshotModel Plan() => new()
     {
         FeedId = Guid.NewGuid(),
         Trips = new Dictionary<string, RealtimeTripSnapshotModel>
@@ -219,6 +247,16 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
                         DepartureTime = "16:00:00" },
                     new() { GtfsTripId = "T2", StopSequence = 5, GtfsStopId = "E", ArrivalTime = "23:59:59" }
                 ]
+            },
+            ["T3"] = new()
+            {
+                GtfsTripId = "T3", GtfsServiceId = "S1", GtfsRouteId = "R1", RouteType = 3, Timezone = "UTC",
+                StopTimes =
+                [
+                    new() { GtfsTripId = "T3", StopSequence = 1, GtfsStopId = "A", Latitude = 54.6800, Longitude = 25.2700,
+                        DepartureTime = _scheduledDeparture },
+                    new() { GtfsTripId = "T3", StopSequence = 2, GtfsStopId = "C", Latitude = 54.6900, Longitude = 25.2900 }
+                ]
             }
         },
         Services = new Dictionary<string, RealtimeServiceSnapshotModel>
@@ -231,7 +269,8 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
         }
     };
 
-    private static FeedMessageModel Position(long timestamp, double latitude, double longitude) => new()
+    private static FeedMessageModel Position(long timestamp, double latitude, double longitude,
+        TripDescriptorModel? trip = null) => new()
     {
         Header = new FeedHeaderModel { GtfsRealtimeVersion = "2.0", Timestamp = (ulong)timestamp },
         Entity =
@@ -242,7 +281,7 @@ public class RealtimeStopTimeProcessingManagerTests : GtfsRealtimeManagementEnti
                 Vehicle = new VehiclePositionModel
                 {
                     Vehicle = new VehicleDescriptorModel { Id = "V1" },
-                    Trip = new TripDescriptorModel { TripId = "T1" },
+                    Trip = trip ?? new TripDescriptorModel { TripId = "T1" },
                     Position = new PositionModel { Latitude = (float)latitude, Longitude = (float)longitude, Speed = 0 },
                     Timestamp = (ulong)timestamp
                 }
